@@ -29,7 +29,41 @@ let server,  //  IS THIS INSTANCE THE SERVER
 
 	cList = [],  //  COLLISION LIST
 	cTypes = {},  //  THE TYPES OF OBJECTS COLLIDING
-	rnd = (val) => { return Math.floor(val*1000)/1000 };
+	rnd = (val) => { return Math.floor(val*1000)/1000 },
+	_n, _d1, _d2,  //  NEAREST, DISTANCE TO
+	_dist, _dir,
+
+	nearestPlayer = obj => {
+		//  FOR EACH PLAYER
+		for(_pI in game.players) {
+			//  TEH PLYER
+			_p = game.players[_pI];
+			//  IT'S CURRENT NEAREST IS IT'S TARGET
+			_n = null;
+			// if(obj.target)
+				// _n = obj.target;
+			//  MAKE SURE PLAYER EXISTS
+			if(_p) {
+				//  IF NEAREST HASN'T BEEN SET, SET IT TO BE THE PLAYER
+				if(!_n) _n = _p;
+				//  DISTANCE TO THE CURRENT NEAREST
+				_d1 = obj.pos.dist(_n.pos);
+				//  DISTANCE TO THE PLAYER
+				_d2 = obj.pos.dist(_p.pos)
+				//  IF THE PLAYER IS CLOSER THAN THE NEAREST
+				if(_d2 < _d1) {
+					//  SET THE NEAREST TO BE THE PLAYER
+					_n = _p;
+					//  SET DISTANCE 1 TO BE THE NEARER DISTANCE (FOR RETURNING)
+					_d1 = _d2;
+				}
+			}
+		}
+		//  SET THE ENEMIES TARGET TO THE NEAREST PLAYER'S POSITION
+		obj.target = _n;
+		//  RETURN DISTANCE TO THE NEAREST
+		return _d1;
+	};
 
 
 
@@ -64,6 +98,10 @@ class Game {
 		this.bp = new BroadPhase({w:1000,h:1000,size:24});
 		this.bullets = ObjectPool(Obj);
 
+		this.enemyTimer = 2000;
+
+		// this.enemies = ObjectPool(Obj)
+
 		//  INIT CACHED TEMPORARY VECTOR
 		_tV = vec();
 
@@ -78,7 +116,7 @@ class Game {
 			this.GL.setDraw(this.render);
 		setTimeout(this.GL.start,100);
 
-	}
+	};
 	//--  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --
 	addPlayer(id,p) {
 		p = p || {};
@@ -97,7 +135,7 @@ class Game {
 		//  IF THIS INSTANCE IS RUNNING ON THE SERVER
 		//  SEND THE STATE OUT TO INFORM EVERYONE OF THE NEW PLAYER
 		if(server) this.sendState()
-	}
+	};
 	removePlayer(id) {
 
 		_p = this.players[id];
@@ -116,7 +154,7 @@ class Game {
 				this.sendState();
 			}
 		}
-	}
+	};
 	//--  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --
 	sendState() {
 
@@ -132,7 +170,10 @@ class Game {
 							_p.vel.x,
 							_p.vel.y,
 							_p.dir,
+							//  IF IT IS A BULLET, SEND IT'S PARENT ID
+							//  OTHERWISE SEND WHETHER IT HAS INPUT THIS CYCLE
 							_p.type.substr(1,1) === 'B' ? _p.pID : _p.input,
+							//  SEND THE FIRST TWO LETTERS OF THE TYPE
 							_p.type.substr(0,2),
 							_p.life
 			];
@@ -145,10 +186,10 @@ class Game {
 		//  SEND THE STATE TO EACH PLAYER
 		for(_pI in this.players)
 			this.players[_pI].socket.emit('state',_state);
-	}
+	};
 	receiveState(S) {
 		game.states.push(S);
-	}
+	};
 	applyState(S) {
 		// _states.push(S);
 		//  FOR EACH OBJECT INDEX IN THE STATE
@@ -188,10 +229,19 @@ class Game {
 					if(!_p) {
 						//  MAKE A NEW BULLET
 						_p = game.fireBullet(0,_o,_oI);
+						// console.log(_p)
 						//  IF IT IS THE CLIENT PLAYER'S BULLET, SHAKE CAM
 						if(_o[5] === game.id)
 							cam.shake(game.player.dir);
 					}
+				break;
+				case 'en':
+					//  FIND ID IN ACTOR LIST
+					_p = game.actors[_oI];
+					// console.log(_o)
+					//  IF IT ISN'T THERE
+					if(!_p) game.addEnemy(_o,_oI);
+
 				break;
 			}
 			if(_p){
@@ -214,16 +264,17 @@ class Game {
 					case 'player':
 						this.removePlayer(_pI);
 					break;
+					case 'enemy':
 					case 'pBullet':
 					case 'eBullet':
-						this.removeBullet(_p);
+						this.removeActor(_p);
 					break;
 				}
 			}
 			// console.log(_pI,this.players[_pI])
 			
 		}
-	}
+	};
 	//--  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --
     sendInput () {
     	_p = game.player;
@@ -233,12 +284,15 @@ class Game {
     	//  3 - Y AXIS
     	//  4 - ROTATION
     	//  5
-        cInput = [socket.id,0,0,0,0];
+        cInput = [socket.id,0,0,0,null];
 
         //  IF MOUSE IS PRESSED, SPACE BAR IS PRESSED, OR A SECOND TOUCH IS HAPPENING
 		if(mouse.pressed  || keys[32] || touchIDs[1])
 			cInput[1] = 1;
 		
+		//  IF THE MOUSE HAS BEEN MOVED
+		// console.log(cInput[1])
+       
 
 		//  RECORD AXIS (ARROWS/WASD/ZQSD OR FIRST TOUCH)
 		
@@ -254,8 +308,10 @@ class Game {
 			_tP = touchPos(_t);
 			//  COPY THE TOUCH POSITION, THEN SUBTRACT THE PLAYER POSITION
 			//  TO GET A VECTOR POINTING FROM THE PLAYER TO THE TOUCH
-			_tV.copy(_tP).sub(game.player.pos);
+			_tV.copy(_tP).sub(touchStart[0]);
+			// console.log(_tV,_t)
 		}
+
 		//  KEYBOARD
 		else {
 	        //  LEFT
@@ -277,20 +333,45 @@ class Game {
 		cInput[3] = _tV.y;
 
 
-
-        // if(game.player) {
         //  RECORD DIRECTION PLAYER IS FACING (TOWARD MOUSE OR SECOND TOUCH)
-        	cInput[4] = game.player.tgt.dir();
-        // }
+        	// cInput[4] = game.player.tDir.dir();
+        
+        //  IF THERE IS A TOUCH ON THE RIGHT SIDE
+        _tID = touchIDs[1];
+        if(_tID) {
+        	_t = touches[_tID];
+        	_tP = touchPos(_t);
+			//  SET FIFTH INPUT TO TOUCH POSITION MINUS TOUCH START, DIRECTION
+	        cInput[4] = _tP.sub(touchStart[1]).dir();
+	    //  NO TOUCHES ON RIGHT SIDE
+        } else {
+        	//  IF THEY ARE NOT FIRING SET THE FACING DIRECTION TO THE DIRECTION OF MOVEMENT
+        	// if(_tV.dir())
+        	if(_tV.dir() + PI >= 0) {
+	        	cInput[4] = _tV.dir();
+
+        	}
+        }
+
+		 if(cInput[1] && !_tID)
+        	//  MAKE THE FIFTH INPUT TO A VECTOR POINTING FROM THE PLAYER TO THE MOUSES POSITION, DIRECTION
+        	cInput[4] = _tV.copy(mouse).sub(game.player.pos).dir();
+
+		//  IF THERE HAS BEEN NO MOUSE OR RIGHT SIDE TOUCHES, SET THIS TO WHAT IT WAS LAST FRAME
+        if(cInput[4] === null) cInput[4] = lR;
+
+       
         if(cInput[1] || cInput[2] || cInput[3] || cInput[4] !== lR) {
 	        //  INPUT ID
 	        // cInput[1] = iID++;
+        // console.log(cInput[4])
+
             socket.emit('input',cInput)
             //  LAST ROTATION (SO WE KNOW IF THE NEXT ONE IS DIFFERENT)
             lR = cInput[4];
             // console.log(cInput)
         }
-    }
+    };
 	receiveInput(I) {
 
 		//  FIRST INDEX IS PLAYER ID
@@ -301,7 +382,7 @@ class Game {
 
 		//  PUSH THE INPUT TO THAT ARRAY
 		input[I[0]].push(I);
-	}
+	};
 	//--  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --
 	checkCollision(o1,o2) {
 		if(!o1 || !o2) return false;
@@ -314,7 +395,7 @@ class Game {
 			//  SCALE HIT DIRECTION TO THE AMOUNT OF OVERLAP AND RETURN
 			return _hit.unit().scl(_hw);
 		} else return false
-	}
+	};
 	fireBullet(p,b,id) {
 		if(server) {
 			if(!p.firing) {
@@ -330,41 +411,62 @@ class Game {
 					dir: p.dir,
 					vx: p.vel.x + _tV.x,
 					vy: p.vel.y + _tV.y,
-					pID: p.id
+					pID: p.id,
+					w: p.type === 'player' ? 12 : 8
 				})
+				// console.log(_b)
 			}
 		} else {
+			// console.log(b)
 			//  CLIENT SIDE JUST MAKE NEW BULLET WITH DATA FROM STATE
 			_b = game.bullets.newObject({
 				type: b[6] === 'pB' ? 'pBullet' : 'eBullet',
 				x: b[0],
 				y: b[1],
 				id: id,
-				pID: b[5]
+				pID: b[5],
+				w: b[6] === 'pB' ? 12 : 8
 			})
 		}
 		//  SET WIDTH OF BULLET
-		_b.w = 12;
+		// if(_b.type === 'pBullet')
+			// _b.w = 12;
+		// else _b.w = 8;
 		//  ADD BULLET TO ACTOR LIST
 		game.actors[_b.id] = _b;
 		return _b;		
-	}
-	removeBullet(b) {
+	};
+	addEnemy(o,id) {
+		// console.log(o)
+		_p = game.bullets.newObject({
+			type: 'enemy',
+			x: o[0],
+			y: o[1],
+			id: id,
+			w: 16
+			// vx: o[2],
+			// vy: o[3],
+			// pID: null
+		})
+		game.actors[_p.id] = _p;
+		// console.log(_p.)
+	};
+	removeActor(b) {
 		b.release();
 		delete game.actors[b.id];
-	}
+	};
 	
 	//--  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --
 	begin(ts,fD,gT) {
 		if(!game) return;
 		if(!server) {
-			_tID = touchIDs[1] || touchIDs[0];
-			if(_tID)
-				mouse.copy(touchPos(touches[_tID]));
-			// else game.player.tgt = null;
+			// _tID = touchIDs[1];
+			// if(_tID)
+				// mouse.copy(touchPos(touches[_tID]));
+			// else game.player.tDir = null;
 			//  SET CLIENT PLAYERS TARGET TO MOUSE COORDS
-			if(game.player)
-				game.player.targetDir();
+			// if(game.player)
+				// game.player.targetDir();
 			game.sendInput();
 		}
 		else {
@@ -373,12 +475,17 @@ class Game {
 				// game.sendState(gT);
 		}
 		
-	}
+	};
 	update(ts,gT) {
 		if(!game) return;
 		
 		//  ON THE SERVER
 		if(server) {
+			game.enemyTimer -= ts;
+			if(game.enemyTimer < 0) {
+				game.addEnemy([0,0]);
+				game.enemyTimer = 4000;
+			}
 			//  FOR EACH ACTOR
 			for(_pI in game.actors) {
 				_p = game.actors[_pI];
@@ -417,10 +524,13 @@ class Game {
 			for(_pI in game.actors) {
 				_p = game.actors[_pI];					
 				cList = game.bp.findMatches(_p);
+					// console.log(cList)
 
 				cList.forEach( obj => {
 
 					if(game.checkCollision(_p,obj)) {
+						// console.log('hit      ',N,_p.id,obj.id);
+
 						if(_p.pID === obj.id
 						|| obj.pID === _p.id
 						|| obj.collidedWith[_p.id]
@@ -457,7 +567,7 @@ class Game {
 			}
 		}
 		
-	}
+	};
 	render() {
 		if(!game) return;
 		ctx.save();
@@ -480,7 +590,7 @@ class Game {
 		ctx.fillStyle = 'white';
 		if(game.player)
 			ctx.fillText(game.player.life,10,10)
-	}
+	};
 	end() {
 		if(!game) return;
 		for(_pI in game.actors) {
@@ -488,10 +598,8 @@ class Game {
 			_p.debug = false;
 			_p.collidedWith = {};
 		}
-		// game.actors.forEach(A => {
-		// 	A.debug = false;
-		// })
-	}
+		if(!server) mouse.moved = false;
+	};
 }
 
 
@@ -541,6 +649,9 @@ class Vec {
 	dir() {
 		return Math.atan2(this.y,this.x);
 	};
+	dist(v) {
+		return Math.sqrt((v.x-this.x)*(v.x-this.x) + (v.y-this.y)*(v.y-this.y));
+	};
 	mag() {
 		this.m = Math.sqrt(this.x*this.x +this.y*this.y);
 		return this.m;
@@ -577,13 +688,20 @@ class Obj {
 
 		this.pos = vec(x,y);
 		this.vel = vec();
-		//  this.tgt IS REUSED ON SERVER AS A SCALAR TARGET DIRECTION VALUE
-		this.tgt = vec();
 		this.axis = vec();
 		this.dir = 0;
+
+		this.acc = 0.3;
+		this.boost = 1;
+		//  tDir GETS REUSED AS A SCALAR VALUE ON THE SERVER
+		//  TARGET DIRECTION
+		this.tDir = vec();
 		this._d;  //  CACHED DIRECTION VARIABLE
-		// this.x = Math.floor(Math.random()*95);
-		// this.y = Math.floor(Math.random()*95);
+
+		//  ENEMIES TARGET
+		this.target = vec();
+		this.aiType = 0;
+		this._in = [];
 
 		//  ROTATION
 		// this.r = 0;
@@ -609,15 +727,18 @@ class Obj {
 	}
 	//  ONLY CALLED ON POOLED OBJECTS
 	init(o) {
-		// console.log(o)
 		this.type = o.type;
+		// console.log(o.type,this.type)
+
 		this.life = 1000;
 		this.pos.copy(o);
-		this.vel.x = o.vx;
-		this.vel.y = o.vy;
+		this.vel.x = o.vx || 0;
+		this.vel.y = o.vy || 0;
 		this.id = o.id || this.id;
+		console.log(this.type,o.id,this.id);
 		this.pID = o.pID;
-
+		this.fSpeed = 500;
+		this.w = o.w;
 	}
 	update(ts) {
 
@@ -637,9 +758,9 @@ class Obj {
 		//  THE DIRECTION WE ARE FACING AND THE DIRECTION THE INPUT WANTS TO FACE
 		//  BOTH FROM -PI TO PI, ADD PI TO MAKE FROM 0 TO 2PI
 		if(server) {
-			this._d = this.turnDir(this.dir+PI, this.tgt+PI);
+			this._d = this.turnDir(this.dir+PI, this.tDir+PI);
 			if(this._d) {
-				// console.log(this.tgt,this.dir,PI)
+				// console.log(this.tDir,this.dir,PI)
 				// console.log(this.dir,this._d)
 
 				this._d = this.turn(this._d,this.tSpd *ts/1000);
@@ -653,34 +774,80 @@ class Obj {
 				case 'eBullet':
 					this.life -= Math.floor(ts);
 					if(this.life <= 0)
-						game.removeBullet(this);
+						game.removeActor(this);
 				break;
 				case 'player':
 					if(this.life <= 0)
 						game.removePlayer(this.id);
 				break;
+				case 'enemy':
+					if(nearestPlayer(this) > 1000
+					|| this.life <= 0)
+						game.removeActor(this);
+					else this.ai(ts);
+				break;
 			}
 
 		}
 
-
-
 		//  RESET FIRING VARIABLE
 		if(this.firing && Date.now() > this.fTime + this.fSpeed)
 			this.firing = false;
-	}
+	};
+	ai(ts) {
+		if(this.target) {
+			//  DISTANCE FROM ENEMY TO TARGET
+			_dist = this.pos.dist(this.target.pos);
+			//  UNIT VECTOR POINTING FROM TARGET TO ENEMY
+			_tV.copy(this.pos).sub(this.target.pos).unit()
+			switch(this.aiType) {
+				case 0:
+					//  BELOW 500 PIXELS, ACCELERATE DIRECTLY AWAY FROM TARGET
+					if(_dist > 500
+					&& _dist < 800)
+					//  ABOVE 500 BUT BELOW 800, CIRCLE
+						_tV.vFrD(_tV.dir()+PI/2);
+
+					//  ELSE IF BELOW 2000, ACCELERATE DIRECTLY TOWARDS
+					else if(_dist < 2000)
+						_tV.scl(-1);
+
+					if(_dist < 1000)
+						game.fireBullet(this);
+
+
+
+				break;
+				case 1:
+				break;
+				case 2:
+				break;
+			}
+			//  FAKE INPUT ARRAY
+			this._in[2] = _tV.x;
+			this._in[3] = _tV.y;
+			this._in[4] = _tV.dir();
+			this.processInput(this._in,ts);
+		} else this.vel.scale(0.8);
+	};
 	collided(obj) {
 		// console.log('collided', this.id)
 		this.collidedWith[obj.id] = true;
 		switch(this.type) {
 			case 'player':
-				switch(obj.type) {
-					case 'eBullet':
-					case 'pBullet':
+				// switch(obj.type) {
+					// case 'eBullet':
+					// case 'pBullet':
 						// this.tookDamage = true;
 						this.life -= 50;
 						// console.log(this.life);
-					break;
+					// break;
+				// }
+			break;
+			case 'enemy':
+				if(obj.type !== 'eBullet') {
+					// console.log('enemy hit')
+					this.life -= 200;
 				}
 			break;
 			case 'pBullet':
@@ -688,7 +855,7 @@ class Obj {
 			// console.log('removing bullet',this.id)
 			// console.log(Object.keys(game.actors));
 				// this.life = -1;
-				game.removeBullet(this);
+				game.removeActor(this);
 			// console.log(Object.keys(game.actors));
 
 
@@ -697,25 +864,36 @@ class Obj {
 	};
 	processInput(I,ts) {
 		//  APPLY INPUT
-		this.vel.x += I[2] * ts/1000;
-		this.vel.y += I[3] * ts/1000;
-		this.tgt = I[4];
-	}
+		// if(this.type === 'enemy')
+			// console.log(I,ts)
+		_tV.x = I[2];
+		_tV.y = I[3];
+		//  IF THE DIRECTION OF ACCELERATION IS WITHIN ONE RADIAN OF THE DIRECTION OF FACING
+		_dir = Math.abs((_tV.dir()+PI)-(I[4]+PI)); 
+		if(_dir < 0.5 || _dir > 2*PI - 0.5)
+			this.boost = 2;
+			// console.log((_tV.dir()+PI)-(I[4]+PI))
+		this.vel.x += I[2] * this.acc * this.boost * ts/1000;
+		this.vel.y += I[3] * this.acc * this.boost * ts/1000;
+		this.tDir = I[4] || 0;
+
+		this.boost = 1;
+	};
 	//  a MUST BE SMALLER THAN b
 	turnDir(a,b) {
 		if(a>b) return -this.turnDir(b,a);
 		return b-a < 2*PI - b + a ? b-a : -(2*PI - b + a);
-	}
+	};
 	turn(val,max) {
 		if(Math.abs(val) > max) {
 			if(val > 0)
 				return max;
 			else return -max;
 		} else return val;
-	}
-	targetDir() {
-		this.tgt.copy(mouse).sub(this.pos).unit();
-	}
+	};
+	// targetDir() {
+	// 	this.tDir.copy(mouse).sub(this.pos).unit();
+	// }
 }
 
 

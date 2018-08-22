@@ -23,6 +23,7 @@
         keys = {},
         mouse = vec(-1,-1),
         touches = {},
+        touchStart = [null,null],
         touchIDs = [null,null],
         _t,_tI,_tP,_tID,  //  TOUCH, TOUCH INDEX, POSITION, AND ID
         pDef = e => e.preventDefault(),
@@ -37,9 +38,10 @@
             switch(e.type) {
                 case "mousedown":
                     if(!game)
-                        socket.emit('join');
+                        join();
                     mouse.pressed = true;
                 case "mousemove":
+                    mouse.moved = true;
                     mouse.x = e.clientX/scale + cam.pos.x;
                     mouse.y = e.clientY/scale + cam.pos.y;
                 break;
@@ -52,15 +54,10 @@
         },
         touchH = e => {
             pDef(e);
-            if(!game
-            && Date.now() - timer > 1000) {
-                timer = Date.now();
-                socket.emit('join');
-            }
+            //  IF A GAME ISN'T INSTANTIATED
+            if(!game) join();
 
-            // touches = e.touches;
-            // touches = {};
-
+            //  STORE AND UPDATE ALL CHANGED TOUCHES
             //  FOR EACH TOUCH
             for(_tI in e.changedTouches) {
                 _t = e.changedTouches[_tI];
@@ -68,37 +65,59 @@
                 
                 //  USE IDENTIFIER AS KEY IN touches
                 if(_tID) {
+                    //  DELETE ENDED TOUCHES
                     if(e.type === 'touchend')
                         delete touches[_tID];
+                    //  ADD OR UPDATE TOUCHES
                     else touches[_tID] = _t;
                 }                 
             }
+            //  CLEAN UP ENDED TOUCH IDS
             //  FOR EACH TOUCH ID (2)
             touchIDs.forEach((id,i) => {
                 //  IF IT ISN'T EQUAL TO NULL AND THE ID
                 //  THAT IS THERE ISN'T IN touches, SET IT TO NULL
                 if(id
-                && !touches[id])
-                   touchIDs[i] = null;
+                && !touches[id]) {
+                    // console.log('setting to null')
+                    touchIDs[i] = null;
+                    touchStart[i] = null;
+                }
             })
+            //  ORGANIZE TOUCHES
             //  FOR EACH TOUCH
             for(_tI in touches) {
                 _t = touches[_tI];
                 _tID = _t.identifier;
+                //  LEFT SIDE OF SCREEN
+                // console.log(touchPos(_t),cam.w/scale/2)
+                if(touchPos(_t).x < cam.w/scale/2) {
+                    if(!touchIDs[0]) {
+                        touchStart[0] = touchPos(_t);
+                        touchIDs[0] = _tID;
+                        // console.log(touchStart[0])
+                    }
+                //  RIGHT SIDE OF SCREEN
+                } else {
+                    if(!touchIDs[1]) {
+                        touchStart[1] = touchPos(_t);
+                        touchIDs[1] = _tID;
+                    }
+                }
                 //  IF IT IS NOT IN touchIDs AND EITHER IS NULL
                 //  IT BECOMES THE NEW FIRST OR SECOND TOUCH
-                if(touchIDs.indexOf(_tID) === -1) {
-                    if(touchIDs[0] === null)
-                        touchIDs[0] = _tID;
-                    else if(touchIDs[1] === null)
-                        touchIDs[1] = _tID;
-                }
+                // if(touchIDs.indexOf(_tID) === -1) {
+                //     if(touchIDs[0] === null)
+                //         touchIDs[0] = _tID;
+                //     else if(touchIDs[1] === null)
+                //         touchIDs[1] = _tID;
+                // }
             }
         },
         touchPos = t => {
             return vec(
-                t.clientX/scale + cam.pos.x,
-                t.clientY/scale + cam.pos.y
+                t.clientX/scale,
+                t.clientY/scale
             )
         },
         displayObj = (O) => {
@@ -118,6 +137,7 @@
             //                 O.w,O.h);
             switch(O.type) {
                 case 'player':
+                case 'enemy':
                     ctx.fillStyle = O.fS;
                     ctx.beginPath();
                     ctx.moveTo(-O.w * 0.5, -O.h * 0.5);
@@ -127,7 +147,10 @@
                     ctx.fill();
                 break;
                 case 'pBullet':
-                    ctx.fillStyle = 'red';
+                case 'eBullet':
+                    O.type === 'pBullet'
+                        ? ctx.fillStyle = 'green'
+                        : ctx.fillStyle = 'red';
                     ctx.beginPath();
                     ctx.arc(0,0,O.w/2,0,Math.PI*2);
                     ctx.fill();
@@ -161,6 +184,15 @@
 
             ctx.restore();
 
+        },
+        join = e => {
+            if(Date.now() - timer > 1000) {
+                 //  THIS TIMER PREVENTS US FROM REQUESTING TO JOIN A GAME AFTER
+                //  THE SERVER HAS ALREADY ADDED US TO A GAME, BUT BEFORE WE KNOW
+                timer = Date.now();
+                //  REQUEST TO JOIN A GAME
+                socket.emit('join');
+            }
         },
         endGame = e => {
             game.GL.stop();
@@ -249,10 +281,17 @@
         //  CAM'S TARGET COPIES THE PLAYER POSITION, SUBTRACT HALF THE CAM'S SIZE TO GET UPPER LEFT CORNER
         //  TEMPORARY VECTOR COPIES THE PLAYERS VELOCITY, SCALES IT UP TEN TIMES
         //  THEN IS ADDED TO THE CAM'S TARGET POSITION
-        cam.tgt.copy(_p.pos).sub({x:cam.w/2/scale,y:cam.h/2/scale}).add(_tV.copy(_p.vel).scl(20*dScl));
-        //  FIND THE OFFSET BETWEEN THE CURRENT POSITION AND THE TARGET POSITION
-        cam.off.copy(cam.tgt).sub(cam.pos);
+        cam.tDir.copy(_p.pos).sub({x:cam.w/2/scale,y:cam.h/2/scale}).add(_tV.vFrD(_p.dir).scl(cam.w/8/scale));
+        // console.log(_p.dir)
+
+        //  FIND THE OFFSET BETWEEN THE CURRENT POSITION AND THE TARGET POSITION, ALSO PRIME THE MAGNITUDE
+        cam.off.copy(cam.tDir).sub(cam.pos).mag();
+        if(cam.off.m > 100)
+            cam.off.scl(0.5);
+        else if(cam.off.m > 1.5)
+            cam.off.unit().scl(1.5);
         //  ADD IT TO THE CAMERA'S POSITION
+        cam.off.add(game.player.vel)
         cam.pos.add(cam.off);
         //  ALSO ADD IT TO THE MOUSE'S POSITION SO THE PLAYER CONTINUES TO LOOK AT THE MOUSE,
         //  NOT THE LAST PLACE THE MOUSE WAS MOVED TO, OFFSET BY A MOVING CAMERA

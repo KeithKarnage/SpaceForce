@@ -87,8 +87,14 @@ class Match {
 	 * @param {}
 	 */
 	leave(user) {
-		this.users.splice(this.users.indexOf(user));
+		this.users.splice(this.users.indexOf(user),1);
 		this.game.removePlayer(user.socket.id);
+		if(this.users.length === 0) {
+			console.log('ending')
+			this.game.GL.stop();
+			// this.game = null;
+			matches.splice(matches.indexOf(this));
+		}
 
 		// if(Object.keys(this.game.players).length < 1)
 			// matches.splice(matches.indexOf(this),1);
