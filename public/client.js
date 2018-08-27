@@ -4,6 +4,8 @@
 
     let socket, //Socket.IO client
         title = document.getElementById('title'),
+        randBtn = document.getElementById('random'),
+        playBtn = document.getElementById('play'),
         // btn,  //  PLAY BUTTON
         timer = 0,  //  TIMER TO MAKE SURE YOU CAN'T PRESS GO TOO OFTERN
         // game,  //  CLIENT SIDE GAME
@@ -11,12 +13,58 @@
         //  CANVAS AND CONTEXT
         cnv = document.createElement('canvas'),
         ctx = cnv.getContext('2d'),
+
+
+        buffer = document.createElement('canvas'),
+        bCtx = buffer.getContext('2d'),
+        Canvas = (w,h) => {
+            let img = document.createElement('canvas');
+            img.ctx = img.getContext('2d');
+            img.width = w;
+            img.height = h;
+            return img;
+        },
+        _ctx,  //  CACHED VARIABLE FOR WORKING WITH IMAGES
+        images = {},
+
+
         cam, cw, ch,  //  CAMERA OBJECT AND CACHED VARIABLES
         scale = 2,
         bScl = 2,  //  BASE SCALE
         dScl = 1,  //  DELTA SCALE (SCALE SUBTRACTOR)
         aScl = 2,  //  dScl - bScl
         sSpd = 0.01, //  SCALE SPEED
+
+        //  v,,w,h,angle,life,blend
+        thruster = [-1,0,10,6,0.2,500,'screen'],
+        particles = ObjectPool(Obj),
+        _P, _pV = vec(),
+
+        emitParticle = (loc,dir,prt,vel = 0) => {
+            _pV.vFrD(dir).scl(prt[0]+vel);
+
+            _P = {
+                type: 'particle',
+                x: loc.x,
+                y: loc.y,
+                vx: _pV.x,
+                vy: _pV.y,
+                w: prt[2],
+                h: prt[3],
+                //  angle
+                // dir: dir,
+                life: prt[5],
+                blend: prt[6]
+            }
+            particles.newObject(_P).id;
+            
+        },
+        updateParticle = (ts,p) => {
+            p.life -= ts;
+            if(p.life < 0)
+                p.release();
+            p.pos.add(p.vel);
+        },
 
         //  CONTROLS
         db = document.body,
@@ -38,7 +86,7 @@
             switch(e.type) {
                 case "mousedown":
                     if(!game)
-                        join();
+                        join(e);
                     mouse.pressed = true;
                 case "mousemove":
                     mouse.moved = true;
@@ -55,7 +103,7 @@
         touchH = e => {
             pDef(e);
             //  IF A GAME ISN'T INSTANTIATED
-            if(!game) join();
+            if(!game) join(e);
 
             //  STORE AND UPDATE ALL CHANGED TOUCHES
             //  FOR EACH TOUCH
@@ -126,8 +174,8 @@
             //  MOVE TO OBJECT LOCATION
             ctx.translate(O.pos.x,O.pos.y);
             //  WRITE LOCATION TO SCREEN
-            ctx.fillStyle = 'black';
-            ctx.fillText('  x:'+Math.floor(O.pos.x)+',y:'+Math.floor(O.pos.y)+',r:'+O.dir,0,0);
+            // ctx.fillStyle = 'black';
+            // ctx.fillText('  x:'+Math.floor(O.pos.x)+',y:'+Math.floor(O.pos.y)+',r:'+O.dir,0,0);
             //  ROTATE CONTEXT
             ctx.rotate(O.dir);
             //  DRAW A RECT
@@ -138,13 +186,13 @@
             switch(O.type) {
                 case 'player':
                 case 'enemy':
-                    ctx.fillStyle = O.fS;
-                    ctx.beginPath();
-                    ctx.moveTo(-O.w * 0.5, -O.h * 0.5);
-                    ctx.lineTo(-O.w * 0.5, O.h * 0.5);
-                    ctx.lineTo(O.w * 0.5, 0);
-                    ctx.closePath();
-                    ctx.fill();
+                //  DRAWS COLLISION CIRCLE
+                // ctx.fillStyle = O.fs;
+                // ctx.beginPath();
+                // ctx.arc(0,0,O.w/2,0,Math.PI*2);
+                // ctx.fill();
+                ctx.rotate(PI/2)
+                    ctx.drawImage(images[O.sprite],-O.w/2-4,-O.h/2-4);
                 break;
                 case 'pBullet':
                 case 'eBullet':
@@ -154,6 +202,13 @@
                     ctx.beginPath();
                     ctx.arc(0,0,O.w/2,0,Math.PI*2);
                     ctx.fill();
+                break;
+                case 'particle':
+                    ctx.globalAlpha = O.life/O.mLife;
+                    if(O.blend)
+                        ctx.globalCompositeOperation =  O.blend;
+                    ctx.fillStyle = 'blue';
+                    ctx.fillRect(-O.w/2,-O.h/2,O.w,O.h);
                 break;
             }
             
@@ -166,32 +221,26 @@
                             O.w,O.h);
             }
             //  DOT IN THE CENTRE
-            ctx.fillStyle = 'black';
-            ctx.fillRect(-1,-1,2,2);
-            
-
-            // if(O.children
-            // && O.children.length > 0) {
-            //     ctx.rotate(-O.r);
-            //     // ctx.translate(
-            //     //     -O.w * 0.5,
-            //     //     -O.h * 0.5
-            //     // );
-            //     O.children.forEach(child => {
-            //         displayObj(child);
-            //     })
-            // }
+            // ctx.fillStyle = 'black';
+            // ctx.fillRect(-1,-1,2,2);
 
             ctx.restore();
 
         },
         join = e => {
-            if(Date.now() - timer > 1000) {
-                 //  THIS TIMER PREVENTS US FROM REQUESTING TO JOIN A GAME AFTER
-                //  THE SERVER HAS ALREADY ADDED US TO A GAME, BUT BEFORE WE KNOW
-                timer = Date.now();
-                //  REQUEST TO JOIN A GAME
-                socket.emit('join');
+            // console.log(touchPos(e).x,innerWidth/scale);
+            if(e.touches && touchPos(e.touches[0]).x > innerWidth/scale/2
+            || mouse.x > innerWidth/scale/2) {
+                if(Date.now() - timer > 1000) {
+                     //  THIS TIMER PREVENTS US FROM REQUESTING TO JOIN A GAME AFTER
+                    //  THE SERVER HAS ALREADY ADDED US TO A GAME, BUT BEFORE WE KNOW
+                    timer = Date.now();
+                    //  REQUEST TO JOIN A GAME
+                    socket.emit('join',_ship);
+                }
+            //  RANDOMIZE SHIP
+            } else {
+                randomPlayer();
             }
         },
         endGame = e => {
@@ -202,6 +251,8 @@
             ctx.fillRect(0,0,cam.w,cam.h,cam.w,cam.h);
             socket.emit('exit');
             title.style.visibility = 'visible';
+            randBtn.style.visibility = 'visible';
+            playBtn.style.visibility = 'visible';
 
         },
         size = e => {
@@ -210,17 +261,119 @@
                 cnv.height = innerHeight;
                 ctx.fillStyle = 'rgb(20,20,20)';
                 ctx.fillRect(0,0,innerWidth,innerHeight);
+                ctx.imageSmoothingEnabled = false;
+
+                
 
                  //  REUSING aScl
                 aScl = cnv.width > cnv.height ? cnv.width : cnv.height;
                 //  BASE SCALE IS MINIMUM OF 2
-                bScl = Math.max(2,aScl/300);
+                bScl = Math.max(2,aScl/360);
 
                 touchIDs = [null,null];
                 touches = {}
 
                 if(cam) cam.size();
             },150);
+        },
+        colours = [
+            //  WHITE SHIP COLOURS
+            '#fff',     //  0 - WHITE
+            '#b2dcef',  //  1 - LIGHT BLUE GREY
+            '#9d9d9d',  //  2 - GREY
+            '#2f484e',  //  3 - DARK GREY
+
+            //  BLUE COCKPIT COLOURS
+            // '#b2dcef',  //  1 - LIGHT BLUE GREY
+            '#31a2f2',  //  4 - LIGHT BLUE
+            '#005784',  //  5 - BLUE
+            '#1b2632',  //  6 - DARK BLUE
+        ],
+        graphs = [
+            [ , ,3,2,  , ,6,5,  , ,3,2,  , , ,5,  , ,3,5,         , ,3,1, 3,3,2,2, 3,3,3,2, 3,3,2,2, 2,2,1,1,         , , ,3,  , , ,3,  , , ,3,  , ,3,3,  ,3,3,3,       ,6,6,6, 3,1,2,1, 6,3,3,1, 6,3,3,2,  ,6,2,1,      0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+            [ , ,3,0,  ,6,5,4,  ,3,2,1,  ,3,6,4,  ,3,2,4,         , ,3,0, 3,2,1,0, 2,3,2,1, 2,2,1,2, 2,1,0,0,         , ,3,1,  , ,3,2,  , ,3,2,  ,3,2,1, 3,2,2,3,      6,6,6,3, 3,2,1,0, 6,6,6,2, 6,6,3,1,  , ,3,3,      0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+            [ ,3,2,0,  ,6,4,2, 3,2,1,4, 3,2,5,1,  ,3,1,1,         ,3,2,0, 2,1,0,0, 1,3,1,0, 3,1,0,2, 1,0,1,1,         ,3,1,1,  ,3,1,3,  ,3,2,1, 3,2,0,2, 3,2,1,1,      6,3,2,1,  ,6,2,0, 6,3,1,2, 6,2,3,1,  , ,6,2,      0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+            [ ,3,1,5, 6,5,5,5, 3,0,4,1, 2,1,5,4, 3,2,0,4,        3,2,1,0, 2,1,0,0, 1,2,3,0, 1,0,0,2, 1,0,1,1,        3,0,1,1, 3,1,2,2, 3,2,1,1, 2,1,0,3, 3,2,1,2,      6,6,6,3, 6,3,3,2, 6,6,2,6,  , , ,2,  , ,6,3,      0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+            [3,2,2,4, 6,5,4,1, 3,1,5,1, 3,3,1,0, 3,2,1,5,        3,1,1,1, 3,1,2,1, 1,2,1,2, 3,2,2,2, 1,0,1,1,        3,1,2,1, 2,2,2,1, 3,2,1,0, 2,1,0,3, 3,3,2,1,      6,3,2,1, 6,6,3,1,  , ,3, ,  , , ,3,  , , , ,      0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+            [3,1,6,1, 3,2,3,2, 3,3,2,0, 2,1,2,5,  ,3,2,4,        3,3,2,1, 3,2,3,0, 2,2,1,0, 1,0,0,0, 1,0,1,1,        3,1,3,3, 2,2,1,3, 3,2,1,0, 3,2,1,3, 3,2,0,1,       ,6,6,3, 6,2,3,1,  , ,3, ,  , , , ,  , , , ,      0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+            [3,0,6,5, 3,2,1,0, 3,2,2,1, 2,1,2,4, 3,2,1,5,        3,1,2,0, 2,3,2,1, 2,2,1,1, 2,1,0,1, 2,1,0,0,        3,3, , , 3,3,2,2, 3,2,1,0,  ,3,2,3, 3,2,0,0,       ,6,3,2,  , , ,2,  , ,3, ,  , , , ,  , , , ,      0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+            [ ,3,1,6,  ,3,2,1,  ,3,1,2,  ,3,2,1,  ,3,2,6,        3,2,3,2, 2,2,3,3, 3,3,2,1, 3,2,2,3, 2,2,1,1,         , , , ,  , ,3,3,  ,3,2,2,  , ,3,3,  ,3,2,2,       ,6,3,2,  , , ,3,  , ,6, ,  , , , ,  , , , ,      0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+
+        ],
+        _g,_x,_y,_plt,
+        //  o[0] = x
+        //  o[1] = y
+        //  o[2] = panel
+        //  o[3] = palette
+        //  o[4] = flip x, >0 == flip, <0 == flip with 8pixel offset
+        //  o[5] = flip y
+        palettes = [
+            [0,1,2,3,4,5,6],
+            [1,1,0,0,1,0,0]
+        ],
+        graph = (c,o) => {
+            // console.log(o)
+            _g = graphs;
+            _plt = palettes[o[3]];
+            // o[4] = o[4] 
+            c.save();
+            c.translate(o[0],o[1]);
+            for(_y=0; _y<8; _y++) {
+                for(_x=0; _x<4; _x++) {
+                    if(_g[_y] && (_g[_y][_x+o[2]*4] || _g[_y][_x+o[2]*4]===0)) {
+                        c.fillStyle = colours[_plt[_g[_y][_x+o[2]*4]]];
+                        if(!o[5])
+                            c.fillRect(_x,_y,1,1);
+                        else c.fillRect(_x,7-_y,1,1);
+                        if(o[4]>0) {
+                            if(o[5])
+                                c.fillRect(7-_x,7-_y,1,1);
+                            else c.fillRect(7-_x,_y,1,1);
+                        } else if(o[4]<0) {
+                            if(o[5])
+                                c.fillRect(15-_x,7-_y,1,1);
+                            else c.fillRect(15-_x,_y,1,1);
+                        }
+                    }
+                }
+            };
+            c.restore();
+        },
+        addShip = s => {
+            images[s] = Canvas(64,64);
+            drawShip(images[s].ctx,0,0,0,_o[9]);
+
+            bCtx.drawImage(images[s],0,0);
+        },
+        //  p = PALETTE
+        //  INDEX FOR PALETTES LIST
+        //  s = SHIP STYLE
+        //  s[0] = COCKPIT
+        //      0-4, 0 IS COMMON ENEMY, 1-3 IS PLAYERS, 4 IS CARGO SHIPS
+        //  s[1] = BODY
+        //      0-4, 0 IS COMMON ENEMY AND CAN BE FLIPPED, 1-3 IS PLAYERS AND CARGO, 1-4 IS CARGO
+        //  s[2] = WINGS
+        //      0-4 NORMAl, 5-9 FLIPPED, ALL AVAILABLE TO COMMONE ENEMY AND PLAYER, 2-4 AVAILABLE TO CARGO
+        //  s[3] = THRUSTERS
+        //      0-4,  0 IS CARGO, 1-3 IS PLAYERS, 4 IS COMMON ENEMY
+        drawShip = (c,x,y,p,s) => {
+
+            //  COCKPIT
+            graph(c,[x+8,y,s[0],p,1]);
+            //  BODY
+            graph(c,[x+8,y+8,5+s[1]%5,p,1,(s[1]>5?1:0)]);
+            //  WINGS
+            graph(c,[x+4,y+8,10+s[2]%5,p,-1,(s[2]>5?1:0)]);
+            //  THRUSTERS
+            graph(c,[x+8,y+16,15+s[3]*1,p,1]);    
+        },
+        randomPlayer = e => {
+            randomShip(0);
+            ctx.save();
+            ctx.scale(8,8);
+            ctx.fillRect(0,0,cnv.width,cnv.height);
+            drawShip(ctx,Math.floor(cnv.width/16)-12,16,0,_ship);
+            ctx.restore();
         };
 
 
@@ -230,6 +383,10 @@
     size();
     //  SET IT TO RESIZE ON ORIENTATION CHANGE (MOBILE)
     addEventListener('orientationchange',size);
+
+    setTimeout(randomPlayer,200);
+
+
 
     //  MAKE THE CAMERA OVJECT
     cam = new Obj(null,null,0,0,cnv.width,cnv.height);
@@ -371,6 +528,8 @@
         socket.on("joined", () => {
             // setMessage(socket.id);
             title.style.visibility = 'hidden';
+            randBtn.style.visibility = 'hidden';
+            playBtn.style.visibility = 'hidden';
             cnv.onclick = e => {};
             game = new Game(false,socket.id);
 

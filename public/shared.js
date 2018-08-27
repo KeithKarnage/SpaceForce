@@ -63,7 +63,36 @@ let server,  //  IS THIS INSTANCE THE SERVER
 		obj.target = _n;
 		//  RETURN DISTANCE TO THE NEAREST
 		return _d1;
-	};
+	},
+
+    _ship,
+    randomShip = type => {
+        _ship = '';
+        switch(type) {
+            //  PLAYER
+            case 0:
+                _ship += 1+(Math.random()*3)|0;
+                _ship += 1+(Math.random()*3)|0;
+                _ship += (Math.random()*10)|0;
+                _ship += 1+(Math.random()*3)|0;
+            break;
+            case 1:
+                _ship += 1;
+                _ship += (Math.random() > 0.5 ? 1 : 5);
+                _ship += (Math.random()*10)|0;
+                _ship += 4;
+            break;
+            case 2:
+            break;
+        }
+    },
+    collision = (o1,o2) => {
+    	o1.collidedWith[o2.id] = true;
+    	o2.collidedWith[o1.id] = true;
+    	o1.collided(o2);
+    	o2.collided(o1);
+		
+    };
 
 
 
@@ -78,7 +107,7 @@ class Game {
 		game = this;
 		this.states = [];
 		//  CANVAS DRAWING CONTEXT, undefined ON SERVER
-		// ctx = C
+
 		//  ID FOR THIS INSTANCE
 		this.id = id;
 		//  LIST OF PLAYERS IN THE GAME
@@ -90,23 +119,13 @@ class Game {
 			this.cam = new Obj();
 		}
 
-
-		// this.stage = new Obj();
-		// this.stage.w = 1000;
-		// this.stage.h = 1000;
-		// this.stage.fS = 'rgba(0,0,0,0)';
 		this.bp = new BroadPhase({w:1000,h:1000,size:24});
-		this.bullets = ObjectPool(Obj);
-
-		this.enemyTimer = 2000;
-
-		// this.enemies = ObjectPool(Obj)
+		this.objPool = ObjectPool(Obj);
 
 		//  INIT CACHED TEMPORARY VECTOR
 		_tV = vec();
 
 		_hit = vec();
-		// _rsp = vec();
 
 		this.GL = createGameLoop();
 		this.GL.setBegin(this.begin);
@@ -124,35 +143,43 @@ class Game {
 		//  MAKE NEW PLAYER AND ASSIGN IT TO this.players
 		_p = this.players[id] = new Obj(id,p.socket,Math.random()*95,Math.random()*95);
 		this.actors[id] = _p;
+		if(server)
+			_p.sprite = p.ship;
+		// else console.log(_p.sprite)
+		// console.log(_p.sprite)
+
+
 
 		//  THE CLIENT'S PLAYER
 		if(id === this.id) {
 			this.player = _p;
 			//  FOR DEBUG REMOVE LATER
-			this.bp.debugID = id;
+			// this.bp.debugID = id;
+
+			
+
 		}
 
 		//  IF THIS INSTANCE IS RUNNING ON THE SERVER
 		//  SEND THE STATE OUT TO INFORM EVERYONE OF THE NEW PLAYER
 		if(server) this.sendState()
 	};
-	removePlayer(id) {
-
-		_p = this.players[id];
-
+	removeObj(id) {
+		_p = game.actors[id];
 		if(_p) {
-			delete this.actors[id];
-			// this.actors.splice(this.actors.indexOf(_p),1);
-			// console.log(id,this.id)
-			if(id === this.id) {
-				console.log('ending game');
-				// endGame();
+			switch(_p.type) {
+				case 'player':
+					delete this.players[id];
+					if(server) {
+						removeUser(users[id]);
+						this.sendState();
+					}
+				break;
+				default:
+					_p.release();
+				break;
 			}
-			delete this.players[id];
-			if(server) {
-				removeUser(users[id]);
-				this.sendState();
-			}
+			delete game.actors[id];
 		}
 	};
 	//--  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --
@@ -165,6 +192,8 @@ class Game {
 		//  MAKE AN ENTRY RECORDING THE X AND Y FOR EACH ACTOR
 		for(_pI in this.actors) {
 			_p = this.actors[_pI];
+			// if(_p.type === 'player')
+				// console.log(_p.sprite)
 			_state[_p.id] = [_p.pos.x,
 							_p.pos.y,
 							_p.vel.x,
@@ -175,13 +204,15 @@ class Game {
 							_p.type.substr(1,1) === 'B' ? _p.pID : _p.input,
 							//  SEND THE FIRST TWO LETTERS OF THE TYPE
 							_p.type.substr(0,2),
-							_p.life
-			];
-			// if(_p.tookDamage) {
-			// 	_state[_p.id][7] = 1;
-			// 	_p.tookDamage = false;
-			// }
-		}
+							_p.life,
+							//  PLAYER MOVEMENT AXIS
+							_p.input ? _p.axis.dir() : false,
+							_p.sprite
+			]
+		};
+		
+
+
 
 		//  SEND THE STATE TO EACH PLAYER
 		for(_pI in this.players)
@@ -200,50 +231,55 @@ class Game {
 			// if(_oI === 'gT' || _oI === 'rT') continue;
 			if(_oI === 'rT') continue;
 
-			//  THE OBJECT
+			//  THE OBJECTS ENTRY IN THE STATE OBJECT
 			_o = S[_oI];
+			//  THE OBJECT (IF IT ALREADY EXISTS)
+			_p = game.actors[_oI];
+			//  IF IT DOES EXIST AND ISN'T THE PROPER TYPE, REMOVE IT
+			if(_p && _p.type.substr(0,2) !== _o[6]) {
+				game.removeObj(_oI);
+				_p = null;
+			};
 			// console.log(_oI)
 			//  IF THE OBJECT INDEX IS NOT INCLUDED IN this.players, MAKE A NEW PLAYER
 			//  addPlayer() SETS _p TO THE MOST RECENTLY CREATED PLAYER
 			switch(_o[6]) {
 				case 'pl':
-					//  FIND ID IN PLAYERS LIST
-					_p = this.players[_oI];
-					//  IF IT ISN'T THERE, MAKE A NEW PLAYER
-					if(!_p) this.addPlayer(_oI);
+					//  IF IT DOESN'T EXIST, MAKE A NEW PLAYER
+					if(!_p) {
+						addShip(_o[9]);
+						this.addPlayer(_oI);
+					}
+
 
 					//  IF IT IS THE CLIENT'S PLAYER AND THEY TOOK DAMAGE
 					if(_oI === game.id
 					&& _o[7] < _p.life) {
 						_p.life = _o[7];
-					// console.log(_p.life,_o[7])
 						cam.shake();
 					}
 
 				break;
 				case 'pB':
 				case 'eB':
-					//  FIND ID IN ACTOR LIST
-					_p = game.actors[_oI];
-					//  IF IT ISN'T THERE
+					//  IF IT DOESN'T EXIST
 					if(!_p) {
 						//  MAKE A NEW BULLET
 						_p = game.fireBullet(0,_o,_oI);
-						// console.log(_p)
 						//  IF IT IS THE CLIENT PLAYER'S BULLET, SHAKE CAM
 						if(_o[5] === game.id)
 							cam.shake(game.player.dir);
 					}
 				break;
 				case 'en':
-					//  FIND ID IN ACTOR LIST
-					_p = game.actors[_oI];
-					// console.log(_o)
-					//  IF IT ISN'T THERE
-					if(!_p) game.addEnemy(_o,_oI);
+					//  IF THE ENEMY DOESN'T EXIST
+					if(!_p) {
+						addShip(_o[9]);
+						game.addEnemy(_o,_oI);
+					}
 
 				break;
-			}
+			};
 			if(_p){
 				_p.pos.x = _o[0];
 				_p.pos.y = _o[1];
@@ -251,28 +287,21 @@ class Game {
 				_p.vel.y = _o[3];
 				_p.dir = _o[4];
 				//  FOR BULLETS, INPUT ACTS AS THE PARENT ID
+
 				_p.input = _o[5];
+				//  _o[6] IS THE OBJECT TYPE USED ABOVE
+				//  _o[7] IS LIFE, DEALT WITH ABOVE AS WELL
+				_p.axis.vFrD(_o[8]);
+				_p.sprite = _o[9];
+				// console.log(_o[9])
 			}
-		}
+		};
 		//  REMOVE ANY OBJECTS NOT INCLUDED IN THE STATE
 		for(_pI in this.actors) {
-			_p - this.actors[_pI];
+			_p = this.actors[_pI];
 			if(_p && !S[_pI]) {
-				
-				_p = this.actors[_pI];
-				switch(_p.type) {
-					case 'player':
-						this.removePlayer(_pI);
-					break;
-					case 'enemy':
-					case 'pBullet':
-					case 'eBullet':
-						this.removeActor(_p);
-					break;
-				}
-			}
-			// console.log(_pI,this.players[_pI])
-			
+				game.removeObj(_pI);
+			}			
 		}
 	};
 	//--  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --
@@ -402,9 +431,9 @@ class Game {
 				p.firing = true;
 				p.fTime = Date.now();
 				//  SET TEMP VECTOR TO THE PLAYER (THAT IS SHOOTING) DIRECTION FACING
-				_tV.vFrD(p.dir).scl(16);
+				_tV.vFrD(p.dir).scl((p.type === 'player' ? 16 : 8));
 				//  MAKE NEW BULLET
-				_b = game.bullets.newObject({
+				_b = game.objPool.newObject({
 					type: p.type === 'player' ? 'pBullet' : 'eBullet',
 					x: p.pos.x+_tV.x,
 					y: p.pos.y+_tV.y,
@@ -414,12 +443,10 @@ class Game {
 					pID: p.id,
 					w: p.type === 'player' ? 12 : 8
 				})
-				// console.log(_b)
 			}
 		} else {
-			// console.log(b)
 			//  CLIENT SIDE JUST MAKE NEW BULLET WITH DATA FROM STATE
-			_b = game.bullets.newObject({
+			_b = game.objPool.newObject({
 				type: b[6] === 'pB' ? 'pBullet' : 'eBullet',
 				x: b[0],
 				y: b[1],
@@ -428,51 +455,49 @@ class Game {
 				w: b[6] === 'pB' ? 12 : 8
 			})
 		}
-		//  SET WIDTH OF BULLET
-		// if(_b.type === 'pBullet')
-			// _b.w = 12;
-		// else _b.w = 8;
 		//  ADD BULLET TO ACTOR LIST
 		game.actors[_b.id] = _b;
 		return _b;		
 	};
-	addEnemy(o,id) {
-		// console.log(o)
-		_p = game.bullets.newObject({
-			type: 'enemy',
-			x: o[0],
-			y: o[1],
-			id: id,
-			w: 16
-			// vx: o[2],
-			// vy: o[3],
-			// pID: null
-		})
-		game.actors[_p.id] = _p;
-		// console.log(_p.)
+	//  FIND LOCATION TO SPAWN ENEMY THAT IS x PIXeLS AWAY FROM P,
+	//  BUT NOT ON ANY OTHER PLAYER'S SCREENS, PUT LOC IN o = [x,y]
+	findSpawnLocation(P,o) {
+		//  RANDOM DIRECTION 
+		_tV.vFrD(Math.random()*PI*2).scl(250).add(P.pos);
+		for(_pI in game.players) {
+			_p = game.players[_pI];
+			if(_tV.dist(_p.pos)<250)
+				return false;
+		} return [_tV.x,_tV.y];
 	};
-	removeActor(b) {
-		b.release();
-		delete game.actors[b.id];
+	addEnemy(o,id,P) {
+		if(P) {
+			o = game.findSpawnLocation(P);
+			randomShip(1);
+		};
+		if(o) {
+			_p = game.objPool.newObject({
+				type: 'enemy',
+				x: o[0],
+				y: o[1],
+				id: id,
+				w: 16,
+				sprite: _ship
+			})
+			console.log('enemy added')
+			game.actors[_p.id] = _p;
+		}
 	};
 	
 	//--  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --
 	begin(ts,fD,gT) {
 		if(!game) return;
-		if(!server) {
-			// _tID = touchIDs[1];
-			// if(_tID)
-				// mouse.copy(touchPos(touches[_tID]));
-			// else game.player.tDir = null;
-			//  SET CLIENT PLAYERS TARGET TO MOUSE COORDS
-			// if(game.player)
-				// game.player.targetDir();
+
+		if(!server)
 			game.sendInput();
-		}
 		else {
 			if(gT - _sTime > 70)
 				game.sendState();
-				// game.sendState(gT);
 		}
 		
 	};
@@ -481,11 +506,6 @@ class Game {
 		
 		//  ON THE SERVER
 		if(server) {
-			game.enemyTimer -= ts;
-			if(game.enemyTimer < 0) {
-				game.addEnemy([0,0]);
-				game.enemyTimer = 4000;
-			}
 			//  FOR EACH ACTOR
 			for(_pI in game.actors) {
 				_p = game.actors[_pI];
@@ -505,8 +525,10 @@ class Game {
 							//  IF FIRING, CREATE BULLET
 							if(_i[1] && !_p.firing)
 								game.fireBullet(_p);
+							//  IF THERE IS DATA ON THE X OR Y AXES
+							if(_i[2] || _i[3])
+								_p.input = true;
 						}
-						_p.input = true;
 					}
 				}
 				//  UPDATE ACTOR
@@ -526,26 +548,33 @@ class Game {
 				cList = game.bp.findMatches(_p);
 					// console.log(cList)
 
-				cList.forEach( obj => {
+				// cList.forEach( obj => {
+				for(_oI=0; _oI<cList.length; _oI++) {
+					_o = cList[_oI];
 
-					if(game.checkCollision(_p,obj)) {
-						// console.log('hit      ',N,_p.id,obj.id);
+					if(game.checkCollision(_p,_o)) {
+						// console.log('hit      ',N,_p.id,_o.id);
 
-						if(_p.pID === obj.id
-						|| obj.pID === _p.id
-						|| obj.collidedWith[_p.id]
-						|| _p.collidedWith[obj.id])
+						if(_p.pID === _o.id
+						|| _o.pID === _p.id
+						|| _o.collidedWith[_p.id]
+						|| _p.collidedWith[_o.id])
 							return;
 
-						// console.log('hit      ',N,_p.id,obj.id);
-						if(obj) obj.collided(_p);
-						if(_p) _p.collided(obj);	
+						collision(_p,_o);
+
+						// console.log('_o',N,_p.type,_o.type);
+						// if(_o) _o.collided(_p);
+						// console.log('_p',N,_p.type,_o.type);
+						// if(_p) _p.collided(_o);	
 					}
-				});
+				}
+				// });
 			}
 		//  ON THE CLIENT
 		} else {
 	        // if(!game.player) return;
+	        particles.active.forEach(p => updateParticle(ts,p));
 
 			
 			//  UPDATE EACH PLAYER
@@ -562,7 +591,8 @@ class Game {
 				} else continue;
 			}
 			if(game.player) {
-				// console.log(game.player.dir)
+
+				// console.log(game.player.sprite)
 				cam.follow(ts);
 			}
 		}
@@ -585,11 +615,17 @@ class Game {
 		for(_pI in game.actors)
 			displayObj(game.actors[_pI]);
 
+		particles.active.forEach(p => displayObj(p));
+
 		
 		ctx.restore();
 		ctx.fillStyle = 'white';
-		if(game.player)
-			ctx.fillText(game.player.life,10,10)
+		if(game.player) {
+			ctx.fillText(game.player.life,10,10);
+			// console.log(game.player.sprite)
+			ctx.drawImage(images[game.player.sprite],0,0);
+		}
+
 	};
 	end() {
 		if(!game) return;
@@ -715,6 +751,8 @@ class Obj {
 		this.fSpeed = 200;
 		this.fTime = 0;
 
+		this.eTimer = 2000;
+
 		//  INPUT THIS CYCLE
 		//  GETS REUSED FOR PARENT ID
 		this.input = false;  
@@ -724,26 +762,45 @@ class Obj {
 		this.debug = false;
 
 
+
 	}
 	//  ONLY CALLED ON POOLED OBJECTS
 	init(o) {
 		this.type = o.type;
 		// console.log(o.type,this.type)
 
-		this.life = 1000;
+		this.life = o.life || 1000;
+		this.mLife = o.life;
+		this.blend = o.blend;
+		this.dir = o.dir || 0;
+
 		this.pos.copy(o);
 		this.vel.x = o.vx || 0;
 		this.vel.y = o.vy || 0;
 		this.id = o.id || this.id;
-		console.log(this.type,o.id,this.id);
+		// console.log(this.type,o.id,this.id);
 		this.pID = o.pID;
-		this.fSpeed = 500;
+		//  MAKE ENEMIES FIRE SLOWER (PLAYERS ARE NOT init-ED)
+		this.fSpeed = 1000;
+		// switch(this.type) {
+			// case 'enemy':
+				this.acc = 0.2;
+			// break;
+			// case 'eBullet':
+			// break;
+		// }
 		this.w = o.w;
+		this.h = o.h || o.w;
+		this.sprite = o.sprite;
 	}
 	update(ts) {
 
 		//  PROCESS MOVEMENT
 		this.pos.add(this.vel);
+		// console.log(this.vel)
+
+		if((this.type === 'player' || this.type === 'enemy') && this.vel.mag() > 2.5)
+			this.vel.unit().scl(2.5);
 
 
 		//   ADD FRICTION
@@ -754,10 +811,14 @@ class Obj {
 		// }
 
 
-		//  PROCESS TURNING
-		//  THE DIRECTION WE ARE FACING AND THE DIRECTION THE INPUT WANTS TO FACE
-		//  BOTH FROM -PI TO PI, ADD PI TO MAKE FROM 0 TO 2PI
+		
 		if(server) {
+
+			//  PROCESS TURNING
+			//  THE DIRECTION WE ARE FACING AND THE DIRECTION THE INPUT WANTS TO FACE
+			//  BOTH FROM -PI TO PI, ADD PI TO MAKE FROM 0 TO 2PI
+			// if(this.type === 'enemy')
+				// console.log(this.tDir,this.dir)
 			this._d = this.turnDir(this.dir+PI, this.tDir+PI);
 			if(this._d) {
 				// console.log(this.tDir,this.dir,PI)
@@ -774,25 +835,52 @@ class Obj {
 				case 'eBullet':
 					this.life -= Math.floor(ts);
 					if(this.life <= 0)
-						game.removeActor(this);
+						game.removeObj(this.id);
 				break;
 				case 'player':
+					this.eTimer -= ts;
+					if(this.eTimer < 0) {
+						this.eTimer = 5000;
+						game.addEnemy(null,null,this);
+					}
 					if(this.life <= 0)
-						game.removePlayer(this.id);
+						game.removeObj(this.id);
 				break;
 				case 'enemy':
-					if(nearestPlayer(this) > 1000
+				// console.log(this)
+					if(nearestPlayer(this) > 3000
 					|| this.life <= 0)
-						game.removeActor(this);
+						game.removeObj(this.id);
 					else this.ai(ts);
 				break;
 			}
-
+		//  NOT ON SERVER
+		} else {
+			// if(this.type === 'player')
+			// 	console.log(this.input)
+			if(this.input)
+				emitParticle(_tV.vFrD(this.dir).unit().scl(-12).add(this.pos),this.axis.dir(),thruster,this.vel.mag()* -1);
 		}
 
 		//  RESET FIRING VARIABLE
 		if(this.firing && Date.now() > this.fTime + this.fSpeed)
 			this.firing = false;
+	};
+	processInput(I,ts) {
+		//  APPLY INPUT
+		//  SAVE THE AXIS DIRECTION TO SEND IT TO ALL CLIENTS SO THEY KNOW WHAT WAY TO DRAW THRUST
+		this.axis.x = I[2];
+		this.axis.y = I[3];
+		//  IF THE DIRECTION OF ACCELERATION IS WITHIN ONE RADIAN OF THE DIRECTION OF FACING
+		_dir = Math.abs((this.axis.dir()+PI)-(I[4]+PI)); 
+		if(_dir < 0.5 || _dir > 2*PI - 0.5)
+			this.boost = 2;
+			// console.log((this.axis.dir()+PI)-(I[4]+PI))
+		this.vel.x += I[2] * this.acc * this.boost * ts/1000;
+		this.vel.y += I[3] * this.acc * this.boost * ts/1000;
+		this.tDir = I[4] || 0;
+
+		this.boost = 1;
 	};
 	ai(ts) {
 		if(this.target) {
@@ -800,22 +888,20 @@ class Obj {
 			_dist = this.pos.dist(this.target.pos);
 			//  UNIT VECTOR POINTING FROM TARGET TO ENEMY
 			_tV.copy(this.pos).sub(this.target.pos).unit()
+			// console.log(_tV)
 			switch(this.aiType) {
 				case 0:
 					//  BELOW 500 PIXELS, ACCELERATE DIRECTLY AWAY FROM TARGET
-					if(_dist > 500
-					&& _dist < 800)
+					if(_dist > 50
+					&& _dist < 100)
 					//  ABOVE 500 BUT BELOW 800, CIRCLE
-						_tV.vFrD(_tV.dir()+PI/2);
-
+						_tV.vFrD(_tV.dir()+PI*1.5);
 					//  ELSE IF BELOW 2000, ACCELERATE DIRECTLY TOWARDS
 					else if(_dist < 2000)
 						_tV.scl(-1);
 
-					if(_dist < 1000)
+					if(_dist < 150)
 						game.fireBullet(this);
-
-
 
 				break;
 				case 1:
@@ -831,7 +917,7 @@ class Obj {
 		} else this.vel.scale(0.8);
 	};
 	collided(obj) {
-		// console.log('collided', this.id)
+		// console.log('collided', this.id,obj.id)
 		this.collidedWith[obj.id] = true;
 		switch(this.type) {
 			case 'player':
@@ -845,40 +931,24 @@ class Obj {
 				// }
 			break;
 			case 'enemy':
-				if(obj.type !== 'eBullet') {
-					// console.log('enemy hit')
-					this.life -= 200;
-				}
+			console.log('enemy hit')
+				if(obj.type !== 'eBullet')
+					this.life -= 340;
 			break;
 			case 'pBullet':
 			case 'eBullet':
 			// console.log('removing bullet',this.id)
 			// console.log(Object.keys(game.actors));
 				// this.life = -1;
-				game.removeActor(this);
+				game.removeObj(this.id);
 			// console.log(Object.keys(game.actors));
 
 
 			break;
 		}
+		// console.log('collided END', this.id,obj.id)
 	};
-	processInput(I,ts) {
-		//  APPLY INPUT
-		// if(this.type === 'enemy')
-			// console.log(I,ts)
-		_tV.x = I[2];
-		_tV.y = I[3];
-		//  IF THE DIRECTION OF ACCELERATION IS WITHIN ONE RADIAN OF THE DIRECTION OF FACING
-		_dir = Math.abs((_tV.dir()+PI)-(I[4]+PI)); 
-		if(_dir < 0.5 || _dir > 2*PI - 0.5)
-			this.boost = 2;
-			// console.log((_tV.dir()+PI)-(I[4]+PI))
-		this.vel.x += I[2] * this.acc * this.boost * ts/1000;
-		this.vel.y += I[3] * this.acc * this.boost * ts/1000;
-		this.tDir = I[4] || 0;
-
-		this.boost = 1;
-	};
+	
 	//  a MUST BE SMALLER THAN b
 	turnDir(a,b) {
 		if(a>b) return -this.turnDir(b,a);
@@ -910,27 +980,27 @@ function ObjectPool(object) {
 	pool.inactive = [];
 	pool.newObject = function(options) {
 
-		let o;
+		let _o;
 		if(pool.inactive.length < 1) {
-			o = new object();
-			o.init(options)
+			_o = new object();
+			_o.init(options)
 			// console.log('new',pool.active.length,pool.inactive.length,pool);
-			o.release = () => {
-				o.visible = false;
-				pool.active.splice(pool.active.indexOf(o),1);
-				pool.inactive.push(o);
+			_o.release = () => {
+				_o.visible = false;
+				pool.active.splice(pool.active.indexOf(_o),1);
+				pool.inactive.push(_o);
 				// console.log('release',pool.active.length,pool.inactive.length);
 			}
 		} else {
 			// console.log('reuse',pool.active.length,pool.inactive.length);
-			o = pool.inactive.shift();
-			o.init(options);
-			o.visible = true;
+			_o = pool.inactive.shift();
+			_o.init(options);
+			_o.visible = true;
 		}
 		// o.birth = timeStamp;
-		pool.active.push(o);
+		pool.active.push(_o);
 
-		return o;
+		return _o;
 	};
 	return pool;
 }

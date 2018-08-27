@@ -10,7 +10,7 @@ const matches = [],
 let matchID = 0,
 	removeUser = user => {
 		// console.log(user)
-		if(user.match)
+		if(user.match && user.match.users.indexOf(user) !== -1)
 			user.end();
 		// delete users[user.socket.id];
 	};
@@ -88,7 +88,7 @@ class Match {
 	 */
 	leave(user) {
 		this.users.splice(this.users.indexOf(user),1);
-		this.game.removePlayer(user.socket.id);
+		this.game.removeObj(user.socket.id);
 		if(this.users.length === 0) {
 			console.log('ending')
 			this.game.GL.stop();
@@ -112,6 +112,7 @@ class User {
 	constructor(socket) {
 		this.socket = socket;
 		this.match = null;
+		this.ship = '';
 	}
 
 	/**
@@ -138,6 +139,7 @@ class User {
 	 * Terminate match
 	 */
 	end() {
+		// console.log('wtf',this,this.match)
 		this.match.leave(this);
 		this.match = null;
 		this.socket.emit("end");
@@ -163,7 +165,9 @@ module.exports = {
 			
 		});
 
-		socket.on('join', o => {
+		socket.on('join', ship => {
+			// console.log(o)
+			user.ship = ship;
 			findMatch(user)
 		});
 
