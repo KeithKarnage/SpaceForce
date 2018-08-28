@@ -895,7 +895,7 @@ class Obj {
 				case 'player':
 					this.eTimer -= ts;
 					if(this.eTimer < 0) {
-						this.eTimer = 10000;
+						this.eTimer = 6000;
 						game.addEnemy(null,null,this);
 					}
 					if(this.life <= 0)
