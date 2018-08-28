@@ -17,7 +17,8 @@ let server,  //  IS THIS INSTANCE THE SERVER
 	// _states,  //  ALL STATES EVER REVEIVED
 	input = [],  //  INPUT FOR ALL ON SERVER, OTHERS ON CLIENT
 	_actors = [],  //  AN ARRAY FOR ACTORS FOR STUPID REASONS
-	cInput,  //  CLIENT INPUT
+	cInput = [0,0,0,0],  //  CLIENT INPUT
+	_wasMoving = false,
 	lR = 0,  //  LAST ROTATION OF CLIENT PLAYER
 
 	_i, _iI,  //  CACHED INPUT VARIABLES
@@ -121,6 +122,10 @@ class Game {
 
 		this.bp = new BroadPhase({w:1000,h:1000,size:24});
 		this.objPool = ObjectPool(Obj);
+		// for(_i=0; _i<20; _i++) {
+		// 	 _o = this.objPool.newObject();
+		// 	 _o.release();
+		// }
 
 		//  INIT CACHED TEMPORARY VECTOR
 		_tV = vec();
@@ -166,7 +171,7 @@ class Game {
 	};
 	removeObj(id) {
 		_p = game.actors[id];
-		if(_p) {
+		if(_p && !_p.dead) {
 			switch(_p.type) {
 				case 'player':
 					delete this.players[id];
@@ -179,8 +184,9 @@ class Game {
 					_p.release();
 				break;
 			}
-			delete game.actors[id];
 		}
+		delete game.actors[id];
+
 	};
 	//--  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --
 	sendState() {
@@ -237,6 +243,7 @@ class Game {
 			_p = game.actors[_oI];
 			//  IF IT DOES EXIST AND ISN'T THE PROPER TYPE, REMOVE IT
 			if(_p && _p.type.substr(0,2) !== _o[6]) {
+				console.log('removing oddject',_p.type.substr(0,2),_p.id, _o[6],_oI);
 				game.removeObj(_oI);
 				_p = null;
 			};
@@ -253,10 +260,10 @@ class Game {
 
 
 					//  IF IT IS THE CLIENT'S PLAYER AND THEY TOOK DAMAGE
-					if(_oI === game.id
-					&& _o[7] < _p.life) {
+					if(_o[7] < _p.life) {
 						_p.life = _o[7];
-						cam.shake();
+						if(_oI === game.id)
+							cam.shake();
 					}
 
 				break;
@@ -313,6 +320,10 @@ class Game {
     	//  3 - Y AXIS
     	//  4 - ROTATION
     	//  5
+
+
+    	if(cInput[2] || cInput[3])
+    		_wasMoving = true;
         cInput = [socket.id,0,0,0,null];
 
         //  IF MOUSE IS PRESSED, SPACE BAR IS PRESSED, OR A SECOND TOUCH IS HAPPENING
@@ -390,7 +401,8 @@ class Game {
         if(cInput[4] === null) cInput[4] = lR;
 
        
-        if(cInput[1] || cInput[2] || cInput[3] || cInput[4] !== lR) {
+        if(cInput[1] || cInput[2] || cInput[3] || cInput[4] !== lR || _wasMoving) {
+        	_wasMoving = false;
 	        //  INPUT ID
 	        // cInput[1] = iID++;
         // console.log(cInput[4])
@@ -430,8 +442,8 @@ class Game {
 			if(!p.firing) {
 				p.firing = true;
 				p.fTime = Date.now();
-				//  SET TEMP VECTOR TO THE PLAYER (THAT IS SHOOTING) DIRECTION FACING
-				_tV.vFrD(p.dir).scl((p.type === 'player' ? 16 : 8));
+				//  SET TEMP VECTOR TO THE PLAYER (THAT IS SHOOTING) DIRECTION FACING SCALED FOR SPEED
+				_tV.vFrD(p.dir).scl((p.type === 'player' ? 10 : 6));
 				//  MAKE NEW BULLET
 				_b = game.objPool.newObject({
 					type: p.type === 'player' ? 'pBullet' : 'eBullet',
@@ -443,6 +455,10 @@ class Game {
 					pID: p.id,
 					w: p.type === 'player' ? 12 : 8
 				})
+				// console.log(_b.type,'bullet id',_b.id);
+				// if(game.actors[_b.id])
+					// console.log('DOUBLING UP!!!',_b.id)
+
 			}
 		} else {
 			//  CLIENT SIDE JUST MAKE NEW BULLET WITH DATA FROM STATE
@@ -484,7 +500,7 @@ class Game {
 				w: 16,
 				sprite: _ship
 			})
-			console.log('enemy added')
+			console.log('enemy added',_p.id);
 			game.actors[_p.id] = _p;
 		}
 	};
@@ -493,8 +509,10 @@ class Game {
 	begin(ts,fD,gT) {
 		if(!game) return;
 
-		if(!server)
+		if(!server) {
+			// console.log(touches,touchIDs)
 			game.sendInput();
+		}
 		else {
 			if(gT - _sTime > 70)
 				game.sendState();
@@ -509,7 +527,7 @@ class Game {
 			//  FOR EACH ACTOR
 			for(_pI in game.actors) {
 				_p = game.actors[_pI];
-				_p.input = false;
+				// _p.input = false;
 				//  IF THEY HAVE INPUT TO BE PROCESSED
 				if(input[_p.id]) {
 					if(input[_p.id].length > 0) {
@@ -523,11 +541,11 @@ class Game {
 							_p.processInput(_i,ts);
 
 							//  IF FIRING, CREATE BULLET
-							if(_i[1] && !_p.firing)
-								game.fireBullet(_p);
+							// if(_i[1] && !_p.firing)
+								// game.fireBullet(_p);
 							//  IF THERE IS DATA ON THE X OR Y AXES
-							if(_i[2] || _i[3])
-								_p.input = true;
+							// if(_i[2] || _i[3])
+							// 	_p.input = true;
 						}
 					}
 				}
@@ -552,14 +570,20 @@ class Game {
 				for(_oI=0; _oI<cList.length; _oI++) {
 					_o = cList[_oI];
 
+					if(!_p
+					|| !_o
+					|| _p.hurt
+					|| _o.hurt
+					|| _p.pID === _o.id
+					|| _o.pID === _p.id
+					|| _o.collidedWith[_p.id]
+					|| _p.collidedWith[_o.id])
+						continue;
+
 					if(game.checkCollision(_p,_o)) {
 						// console.log('hit      ',N,_p.id,_o.id);
 
-						if(_p.pID === _o.id
-						|| _o.pID === _p.id
-						|| _o.collidedWith[_p.id]
-						|| _p.collidedWith[_o.id])
-							return;
+						
 
 						collision(_p,_o);
 
@@ -576,10 +600,24 @@ class Game {
 	        // if(!game.player) return;
 	        particles.active.forEach(p => updateParticle(ts,p));
 
-			
+			// if(game.player && cam)
+				// console.log(cam.pos.x + cam.w/scale,game.player.pos.x,cam.pos.x + cam.w/scale-game.player.pos.x)
+
 			//  UPDATE EACH PLAYER
-			for(_pI in game.players)
-				game.players[_pI].update(ts);
+			for(_pI in game.actors) {
+				_p = game.actors[_pI];
+				_p.update(ts);
+				if(_p.id !== game.id && (_p.type === 'player' || _p.type === 'enemy')) {
+					_dir = Math.acos(_tV.copy(_p.pos).sub(game.player.pos).dir());
+					// _tV.copy(game.player.pos).
+					// arrows.push()
+					// console.log(cam.pos.x + cam.w/scale,game.player.pos.x,cam.pos.x + cam.w/scale-game.player.pos.x)
+					// if(_dir)
+						// console.log((cam.pos.x + cam.w/scale-game.player.pos.x)/_dir)
+
+					// console.log(cam.w)
+				}
+			}
 			//  IF THERE ARE ANY STATES FROM THE SERVER
 			for(_sI=0; _sI < game.states.length; _sI++) {
 				_s = game.states[_sI];
@@ -595,6 +633,7 @@ class Game {
 				// console.log(game.player.sprite)
 				cam.follow(ts);
 			}
+
 		}
 		
 	};
@@ -612,8 +651,18 @@ class Game {
 		// displayObj(game.stage);
 
 		// game.actors.forEach( a => displayObj(a) );
-		for(_pI in game.actors)
-			displayObj(game.actors[_pI]);
+		for(_pI in game.actors) {
+			_p = game.actors[_pI];
+			displayObj(_p);
+			if((_p.type === 'enemy' || _p.type === 'player')&& _p.id !== game.id) {
+				ctx.strokeStyle = 'green';
+				ctx.beginPath();
+				ctx.moveTo(game.player.pos.x,game.player.pos.y);
+				ctx.lineTo(_p.pos.x,_p.pos.y);
+				ctx.stroke();
+
+			}
+		}
 
 		particles.active.forEach(p => displayObj(p));
 
@@ -623,7 +672,7 @@ class Game {
 		if(game.player) {
 			ctx.fillText(game.player.life,10,10);
 			// console.log(game.player.sprite)
-			ctx.drawImage(images[game.player.sprite],0,0);
+			// ctx.drawImage(images[game.player.sprite],0,0);
 		}
 
 	};
@@ -717,6 +766,7 @@ class Obj {
 		this.type = 'player';
 
 		this.life = 1000;
+		this.hurt = false;
 		// this.tookDamage = false;
 
 		//  FILL STYLE
@@ -770,6 +820,9 @@ class Obj {
 		// console.log(o.type,this.type)
 
 		this.life = o.life || 1000;
+		this.hurt = false;
+		this.dead = false;
+
 		this.mLife = o.life;
 		this.blend = o.blend;
 		this.dir = o.dir || 0;
@@ -834,13 +887,15 @@ class Obj {
 				case 'pBullet':
 				case 'eBullet':
 					this.life -= Math.floor(ts);
-					if(this.life <= 0)
+					if(this.life <= 0) {
+						// console.log('BULLET DIED',this.id)
 						game.removeObj(this.id);
+					}
 				break;
 				case 'player':
 					this.eTimer -= ts;
 					if(this.eTimer < 0) {
-						this.eTimer = 5000;
+						this.eTimer = 10000;
 						game.addEnemy(null,null,this);
 					}
 					if(this.life <= 0)
@@ -848,18 +903,30 @@ class Obj {
 				break;
 				case 'enemy':
 				// console.log(this)
-					if(nearestPlayer(this) > 3000
-					|| this.life <= 0)
+					if(nearestPlayer(this) > 2000) {
+						console.log('enemy despawning')
 						game.removeObj(this.id);
+					}
+					if(this.life <= 0) {
+						console.log('enemy died')
+						game.removeObj(this.id);
+						this.dead = true;
+
+					}
 					else this.ai(ts);
 				break;
 			}
+
+			//  HURT TIMER
+			if(this.hurt && Date.now()-this.hurt > 100)
+				this.hurt = false;
 		//  NOT ON SERVER
 		} else {
-			// if(this.type === 'player')
-			// 	console.log(this.input)
-			if(this.input)
-				emitParticle(_tV.vFrD(this.dir).unit().scl(-12).add(this.pos),this.axis.dir(),thruster,this.vel.mag()* -1);
+			if(this.type === 'player' || this.type === 'enemy') {
+				// console.log(this.input)
+				if(this.input)
+					emitParticle(ts,_tV.vFrD(this.dir).unit().scl(-12).add(this.pos),this.axis.dir(),thruster,this.vel.mag()* -1);
+			}
 		}
 
 		//  RESET FIRING VARIABLE
@@ -867,6 +934,8 @@ class Obj {
 			this.firing = false;
 	};
 	processInput(I,ts) {
+		this.input = false;
+		// console.log(I)
 		//  APPLY INPUT
 		//  SAVE THE AXIS DIRECTION TO SEND IT TO ALL CLIENTS SO THEY KNOW WHAT WAY TO DRAW THRUST
 		this.axis.x = I[2];
@@ -881,9 +950,16 @@ class Obj {
 		this.tDir = I[4] || 0;
 
 		this.boost = 1;
+
+		if(I[1])
+			game.fireBullet(this);
+
+		if(I[2] || I[3])
+			this.input = true;
 	};
 	ai(ts) {
 		if(this.target) {
+			this._in = [];
 			//  DISTANCE FROM ENEMY TO TARGET
 			_dist = this.pos.dist(this.target.pos);
 			//  UNIT VECTOR POINTING FROM TARGET TO ENEMY
@@ -901,7 +977,8 @@ class Obj {
 						_tV.scl(-1);
 
 					if(_dist < 150)
-						game.fireBullet(this);
+						this._in[1] = 1;
+						// game.fireBullet(this);
 
 				break;
 				case 1:
@@ -918,7 +995,8 @@ class Obj {
 	};
 	collided(obj) {
 		// console.log('collided', this.id,obj.id)
-		this.collidedWith[obj.id] = true;
+		// this.collidedWith[obj.id] = true;
+
 		switch(this.type) {
 			case 'player':
 				// switch(obj.type) {
@@ -933,19 +1011,27 @@ class Obj {
 			case 'enemy':
 			console.log('enemy hit')
 				if(obj.type !== 'eBullet')
-					this.life -= 340;
+					this.life -= 360;
 			break;
 			case 'pBullet':
 			case 'eBullet':
 			// console.log('removing bullet',this.id)
 			// console.log(Object.keys(game.actors));
 				// this.life = -1;
-				game.removeObj(this.id);
-			// console.log(Object.keys(game.actors));
+				// console.log('BULLET HIT',this.id)
+				if(!this.dead) {
 
+
+					game.removeObj(this.id);
+					this.dead = true;
+
+				}
+			// console.log(Object.keys(game.actors));
 
 			break;
 		}
+		this.hurt = Date.now();
+
 		// console.log('collided END', this.id,obj.id)
 	};
 	
@@ -978,27 +1064,44 @@ function ObjectPool(object) {
 	let pool = {};
 	pool.active = [];
 	pool.inactive = [];
+
+	let tmp1 = [];
+	let tmp2 = [];
 	pool.newObject = function(options) {
 
 		let _o;
 		if(pool.inactive.length < 1) {
 			_o = new object();
 			_o.init(options)
-			// console.log('new',pool.active.length,pool.inactive.length,pool);
+			// if(server) console.log('new',pool.active.length,pool.inactive.length,'id:',_o.id);
 			_o.release = () => {
+				// if(server) console.log('release',pool.active.length,pool.inactive.length,'id:',_o.id);
 				_o.visible = false;
 				pool.active.splice(pool.active.indexOf(_o),1);
 				pool.inactive.push(_o);
-				// console.log('release',pool.active.length,pool.inactive.length);
+				// if(server) {
+				// 	tmp1 = [];
+				// 	tmp2 = [];
+				// 	pool.active.forEach(o => tmp1.push(o.id));
+				// 	pool.inactive.forEach(o => tmp2.push(o.id));
+				// 	console.log('REMOVE id:',_o.id,_o.type,tmp1,tmp2);
+				// }
 			}
 		} else {
-			// console.log('reuse',pool.active.length,pool.inactive.length);
 			_o = pool.inactive.shift();
 			_o.init(options);
+			// if(server) console.log('reuse',pool.active.length,pool.inactive.length,'id:',_o.id);
 			_o.visible = true;
+			
 		}
-		// o.birth = timeStamp;
 		pool.active.push(_o);
+		// if(server) {
+		// 	tmp1 = [];
+		// 	tmp2 = [];
+		// 	pool.active.forEach(o => tmp1.push(o.id));
+		// 	pool.inactive.forEach(o => tmp2.push(o.id));
+		// 	console.log('ADD id:',_o.id,_o.type,tmp1,tmp2);
+		// }
 
 		return _o;
 	};

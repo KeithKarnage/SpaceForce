@@ -35,12 +35,14 @@
         aScl = 2,  //  dScl - bScl
         sSpd = 0.01, //  SCALE SPEED
 
-        //  v,,w,h,angle,life,blend
-        thruster = [-1,0,10,6,0.2,500,'screen'],
+        //  v,pps,w,h,angle,life,blend
+        thruster = [-1,1,10,6, 0.2,500,'screen'],
+        splosion = [ 1, , 6,6,PI*2,200,'screen'],
         particles = ObjectPool(Obj),
         _P, _pV = vec(),
 
-        emitParticle = (loc,dir,prt,vel = 0) => {
+        emitParticle = (ts,loc,dir,prt,vel = 0) => {
+            dir = dir - prt[4]/2 + Math.random()*prt[4];
             _pV.vFrD(dir).scl(prt[0]+vel);
 
             _P = {
@@ -162,6 +164,10 @@
                 // }
             }
         },
+        resetTouches = t => {
+            touches = {};
+            touchIDs = [null,null];
+        },
         touchPos = t => {
             return vec(
                 t.clientX/scale,
@@ -184,8 +190,11 @@
             //                 -O.h * 0.5,
             //                 O.w,O.h);
             switch(O.type) {
-                case 'player':
+                
                 case 'enemy':
+                // ctx.fillStyle = 'white';
+                // ctx.fillText(O.id,10,0)
+                case 'player':
                 //  DRAWS COLLISION CIRCLE
                 // ctx.fillStyle = O.fs;
                 // ctx.beginPath();
@@ -202,6 +211,9 @@
                     ctx.beginPath();
                     ctx.arc(0,0,O.w/2,0,Math.PI*2);
                     ctx.fill();
+
+                    // ctx.fillStyle = 'white';
+                    // ctx.fillText(O.id,0,0)
                 break;
                 case 'particle':
                     ctx.globalAlpha = O.life/O.mLife;
@@ -211,6 +223,7 @@
                     ctx.fillRect(-O.w/2,-O.h/2,O.w,O.h);
                 break;
             }
+            
             
             
 
@@ -269,9 +282,9 @@
                 aScl = cnv.width > cnv.height ? cnv.width : cnv.height;
                 //  BASE SCALE IS MINIMUM OF 2
                 bScl = Math.max(2,aScl/360);
-
-                touchIDs = [null,null];
-                touches = {}
+                resetTouches();
+                // touchIDs = [null,null];
+                // touches = {}
 
                 if(cam) cam.size();
             },150);
@@ -410,7 +423,8 @@
     cam.size = e => {
         cam.w = cnv.width;
         cam.h = cnv.height;
-    }
+    };
+
     //  FOLLOW THE PLAYER
     cam.follow = () => {
         cw = cam.w/scale;
@@ -530,6 +544,9 @@
             title.style.visibility = 'hidden';
             randBtn.style.visibility = 'hidden';
             playBtn.style.visibility = 'hidden';
+            resetTouches();
+            // touches = {};
+            // touchIDs = [];
             cnv.onclick = e => {};
             game = new Game(false,socket.id);
 
