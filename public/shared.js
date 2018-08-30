@@ -263,6 +263,8 @@ class Game {
 					//  IF IT IS THE CLIENT'S PLAYER AND THEY TOOK DAMAGE
 					if(_o[7] < _p.life) {
 						_p.life = _o[7];
+						_p.hurt = Date.now();
+						emitParticle(_p.pos,0,'splosion');
 						if(_oI === game.id)
 							cam.shake();
 					}
@@ -284,6 +286,11 @@ class Game {
 					if(!_p) {
 						addShip(_o[9]);
 						game.addEnemy(_o,_oI);
+					}
+					if(_o[7] < _p.life) {
+						_p.life = _o[7];
+						_p.hurt = Date.now();
+						emitParticle(_p.pos,0,'splosion');
 					}
 
 				break;
@@ -501,7 +508,7 @@ class Game {
 				w: 16,
 				sprite: _ship
 			})
-			console.log('enemy added',_p.id);
+			// console.log('enemy added',_p.id);
 			game.actors[_p.id] = _p;
 		}
 	};
@@ -599,7 +606,7 @@ class Game {
 		//  ON THE CLIENT
 		} else {
 	        // if(!game.player) return;
-	        particles.active.forEach(p => updateParticle(ts,p));
+	        particlePool.active.forEach(p => updateParticle(ts,p));
 
 			// if(game.player && cam)
 				// console.log(cam.pos.x + cam.w/scale,game.player.pos.x,cam.pos.x + cam.w/scale-game.player.pos.x)
@@ -610,100 +617,103 @@ class Game {
 				_p.update(ts);
 
 				//  UPDATE OFFSCREEN ARROW POSITIONS
-				if(_p.id !== game.id && (_p.type === 'player' || _p.type === 'enemy')) {
-					_tV.copy(_p.pos).sub(game.player.pos);
-					//  ACTOR TO THE RIGHT OF PLAYER
-					if(_p.pos.x > game.player.pos.x) {
-						//  DISTANCE TO RIGHT SIDE OF SCREEN
-						_X = (cam.pos.x+cam.w/scale)-game.player.pos.x;
+				if(cam.offScreen(_p)) {
+					if(_p.id !== game.id && (_p.type === 'player' || _p.type === 'enemy')) {
+						_tV.copy(_p.pos).sub(game.player.pos);
+						//  ACTOR TO THE RIGHT OF PLAYER
+						if(_p.pos.x > game.player.pos.x) {
+							//  DISTANCE TO RIGHT SIDE OF SCREEN
+							_X = (cam.pos.x+cam.w/scale)-game.player.pos.x;
+								
 							
-						
-						//  ACTOR BELOW PLAYER
-						if(_p.pos.y > game.player.pos.y) {
-							//  DISTANCE TO BOTTOM OF SCREEN
-							_Y = (cam.pos.y+cam.h/scale)-game.player.pos.y;
-							//  SLOPE OF LINE TO PLAYER
-							_Z = _tV.x/_tV.y;
-							//  _X/_Z IS THE Y INTERCEPT
-							//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN BELOW THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
-							if(_X/_Z < _Y ) {
-								//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
-								_p.arrow.copy({x:_X,y:_X/_Z}).add(game.player.pos);
-								
-								// console.log;
-							//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE BOTTOM
-							} else {
-								//  I'M NOT SURE WHY I HAVE TO SWITCH IT
-								_Z = _tV.y/_tV.x;
-								_p.arrow.copy({x:_Y/_Z,y:_Y}).add(game.player.pos);
-							}
+							//  ACTOR BELOW PLAYER
+							if(_p.pos.y > game.player.pos.y) {
+								//  DISTANCE TO BOTTOM OF SCREEN
+								_Y = (cam.pos.y+cam.h/scale)-game.player.pos.y;
+								//  SLOPE OF LINE TO PLAYER
+								_Z = _tV.x/_tV.y;
+								//  _X/_Z IS THE Y INTERCEPT
+								//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN BELOW THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
+								if(_X/_Z < _Y ) {
+									//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
+									_p.arrow.copy({x:_X,y:_X/_Z}).add(game.player.pos);
+									
+									// console.log;
+								//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE BOTTOM
+								} else {
+									//  I'M NOT SURE WHY I HAVE TO SWITCH IT
+									_Z = _tV.y/_tV.x;
+									_p.arrow.copy({x:_Y/_Z,y:_Y}).add(game.player.pos);
+								}
 
-						//  ACTOR ABOVE PLAYER
-						} else {
-							//  DISTANCE TO TOP OF SCREEN
-							_Y = game.player.pos.y - cam.pos.y;
-							//  SLOPE OF LINE TO PLAYER
-							_Z = _tV.x/_tV.y;
-							//  _X/_Z IS THE Y INTERCEPT
-							//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN ABOVE THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
-							if(Math.abs(_X/_Z) < _Y ) {
-								//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
-								_p.arrow.copy({x:_X,y:_X/_Z}).add(game.player.pos);
-							//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE TOP
+							//  ACTOR ABOVE PLAYER
 							} else {
-								//  I'M NOT SURE WHY I HAVE TO SWITCH IT
-								_Z = _tV.y/_tV.x;
-								//  NEGATIVE VALUES IN HERE
-								_p.arrow.copy({x:-_Y/_Z,y:-_Y}).add(game.player.pos);
+								//  DISTANCE TO TOP OF SCREEN
+								_Y = game.player.pos.y - cam.pos.y;
+								//  SLOPE OF LINE TO PLAYER
+								_Z = _tV.x/_tV.y;
+								//  _X/_Z IS THE Y INTERCEPT
+								//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN ABOVE THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
+								if(Math.abs(_X/_Z) < _Y ) {
+									//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
+									_p.arrow.copy({x:_X,y:_X/_Z}).add(game.player.pos);
+								//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE TOP
+								} else {
+									//  I'M NOT SURE WHY I HAVE TO SWITCH IT
+									_Z = _tV.y/_tV.x;
+									//  NEGATIVE VALUES IN HERE
+									_p.arrow.copy({x:-_Y/_Z,y:-_Y}).add(game.player.pos);
+								}
+							}
+						//  ACTOR TO THE LEFT OF PLAYER
+						} else {
+							//  DISTANCE TO LEFT SIDE OF SCREEN
+							_X = game.player.pos.x - cam.pos.x;
+
+							//  ACTOR BELOW PLAYER
+							if(_p.pos.y > game.player.pos.y) {
+								//  DISTANCE TO BOTTOM OF SCREEN
+								_Y = (cam.pos.y+cam.h/scale)-game.player.pos.y;
+								//  SLOPE OF LINE TO PLAYER
+								_Z = _tV.x/_tV.y;
+								//  _X/_Z IS THE Y INTERCEPT
+								//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN BELOW THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
+								if(Math.abs(_X/_Z) < _Y ) {
+									//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
+									_p.arrow.copy({x:-_X,y:-_X/_Z}).add(game.player.pos);
+									
+									// console.log;
+								//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE BOTTOM
+								} else {
+									//  I'M NOT SURE WHY I HAVE TO SWITCH IT
+									_Z = _tV.y/_tV.x;
+									_p.arrow.copy({x:_Y/_Z,y:_Y}).add(game.player.pos);
+								}
+							//  ACTOR ABOVE PLAYER
+							} else {
+								//  DISTANCE TO TOP OF SCREEN
+								_Y = game.player.pos.y - cam.pos.y;
+								//  SLOPE OF LINE TO PLAYER
+								_Z = _tV.x/_tV.y;
+								//  _X/_Z IS THE Y INTERCEPT
+								//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN ABOVE THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
+								if(Math.abs(_X/_Z) < _Y ) {
+									//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
+									_p.arrow.copy({x:-_X,y:-_X/_Z}).add(game.player.pos);
+								//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE TOP
+								} else {
+									//  I'M NOT SURE WHY I HAVE TO SWITCH IT
+									_Z = _tV.y/_tV.x;
+									//  NEGATIVE VALUES IN HERE
+									_p.arrow.copy({x:-_Y/_Z,y:-_Y}).add(game.player.pos);
+								}
 							}
 						}
-					//  ACTOR TO THE LEFT OF PLAYER
-					} else {
-						//  DISTANCE TO LEFT SIDE OF SCREEN
-						_X = game.player.pos.x - cam.pos.x;
-
-						//  ACTOR BELOW PLAYER
-						if(_p.pos.y > game.player.pos.y) {
-							//  DISTANCE TO BOTTOM OF SCREEN
-							_Y = (cam.pos.y+cam.h/scale)-game.player.pos.y;
-							//  SLOPE OF LINE TO PLAYER
-							_Z = _tV.x/_tV.y;
-							//  _X/_Z IS THE Y INTERCEPT
-							//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN BELOW THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
-							if(Math.abs(_X/_Z) < _Y ) {
-								//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
-								_p.arrow.copy({x:-_X,y:-_X/_Z}).add(game.player.pos);
-								
-								// console.log;
-							//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE BOTTOM
-							} else {
-								//  I'M NOT SURE WHY I HAVE TO SWITCH IT
-								_Z = _tV.y/_tV.x;
-								_p.arrow.copy({x:_Y/_Z,y:_Y}).add(game.player.pos);
-							}
-						//  ACTOR ABOVE PLAYER
-						} else {
-							//  DISTANCE TO TOP OF SCREEN
-							_Y = game.player.pos.y - cam.pos.y;
-							//  SLOPE OF LINE TO PLAYER
-							_Z = _tV.x/_tV.y;
-							//  _X/_Z IS THE Y INTERCEPT
-							//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN ABOVE THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
-							if(Math.abs(_X/_Z) < _Y ) {
-								//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
-								_p.arrow.copy({x:-_X,y:-_X/_Z}).add(game.player.pos);
-							//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE TOP
-							} else {
-								//  I'M NOT SURE WHY I HAVE TO SWITCH IT
-								_Z = _tV.y/_tV.x;
-								//  NEGATIVE VALUES IN HERE
-								_p.arrow.copy({x:-_Y/_Z,y:-_Y}).add(game.player.pos);
-							}
-						}
+						//  THE DIRECTION IT IS POINTING (FOR AIMING AN ARROW)
+						_p.arrow.d = _tV.dir();
+						// _p.arrow.scl(0.8);
 					}
-					//  THE DIRECTION IT IS POINTING (FOR AIMING AN ARROW)
-					_p.arrow.dir = _tV.dir();
-				}
+				} else _p.arrow.d = null;
 			}
 			//  IF THERE ARE ANY STATES FROM THE SERVER
 			for(_sI=0; _sI < game.states.length; _sI++) {
@@ -750,15 +760,19 @@ class Game {
 				// ctx.lineTo(_p.pos.x,_p.pos.y);
 				// ctx.stroke();
 
-				if(_p.arrow.dir) {
+				if(_p.arrow.d) {
+					ctx.save()
 					ctx.fillStyle = 'green';
-					ctx.fillRect(_p.arrow.x - 8,_p.arrow.y - 8,16,16);
+					ctx.translate(_p.arrow.x,_p.arrow.y);
+					ctx.rotate(_p.arrow.d);
+					ctx.fillRect(-8,-8,16,16);
+					ctx.restore();
 				}
 
 			}
 		}
 
-		particles.active.forEach(p => displayObj(p));
+		particlePool.active.forEach(p => displayObj(p));
 
 		
 		ctx.restore();
@@ -913,6 +927,8 @@ class Obj {
 	//  ONLY CALLED ON POOLED OBJECTS
 	init(o) {
 		this.type = o.type;
+		this.arrow.clr();
+		this.name = o.name;
 		// console.log(o.type,this.type)
 
 		this.life = o.life || 1000;
@@ -1004,25 +1020,28 @@ class Obj {
 						game.removeObj(this.id);
 					}
 					if(this.life <= 0) {
-						console.log('enemy died')
+						// console.log('enemy died')
 						game.removeObj(this.id);
 						this.dead = true;
 
 					}
-					// else this.ai(ts);
+					else this.ai(ts);
 				break;
 			}
 
-			//  HURT TIMER
-			if(this.hurt && Date.now()-this.hurt > 100)
-				this.hurt = false;
+			
 		//  NOT ON SERVER
 		} else {
 			if(this.type === 'player' || this.type === 'enemy') {
 				// console.log(this.input)
 				if(this.input)
-					emitParticle(ts,_tV.vFrD(this.dir).unit().scl(-12).add(this.pos),this.axis.dir(),thruster,this.vel.mag()* -1);
+					emitParticle(_tV.vFrD(this.dir).unit().scl(-12).add(this.pos),this.axis.dir(),'thruster',this.vel.mag()* -1);
 			}
+		}
+		//  HURT TIMER
+		if(this.hurt && Date.now()-this.hurt > 100) {
+			// console.log('unhurting')
+			this.hurt = false;
 		}
 
 		//  RESET FIRING VARIABLE
@@ -1105,7 +1124,7 @@ class Obj {
 				// }
 			break;
 			case 'enemy':
-			console.log('enemy hit')
+			// console.log('enemy hit')
 				if(obj.type !== 'eBullet')
 					this.life -= 360;
 			break;
@@ -1127,8 +1146,6 @@ class Obj {
 			break;
 		}
 		this.hurt = Date.now();
-
-		// console.log('collided END', this.id,obj.id)
 	};
 	
 	//  a MUST BE SMALLER THAN b
@@ -1331,17 +1348,6 @@ function BroadPhase(options) {
 				if(object.id === bp.debugID)
 					obj.debug = true;
 			}
-			// if(count > 0)
-			// 	console.log(obj.id === object.id);
-			// if(obj.id === object.id
-			// || knownIDs[obj.id]) {
-			// 	matchResults.splice(i,1);
-			// 	// return;
-			// } else {
-			// 	if(count > 0)
-			// 		console.log('adding')
-			// 	knownIDs[obj.id] = obj.id;
-			// }
 		});
 		return results;
 	};
@@ -1534,3 +1540,6 @@ function createGameLoop() {
 
     return GameLoop;
 }
+
+
+

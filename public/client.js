@@ -35,30 +35,37 @@
         aScl = 2,  //  dScl - bScl
         sSpd = 0.01, //  SCALE SPEED
 
-        //  v,pps,w,h,angle,life,blend
-        thruster = [-1,1,10,6, 0.2,500,'screen'],
-        splosion = [ 1, , 6,6,PI*2,200,'screen'],
-        particles = ObjectPool(Obj),
-        _P, _pV = vec(),
+        //  v,count,w,h,angle,life,blend
+        particles = {
+            thruster: [-1,1,10,6, 0.2,500,'screen'],
+            splosion: [ 1,8, 12,12,PI*2,200,'screen'],
+        },
+        particlePool = ObjectPool(Obj),
+        _P,_ppI, _pV = vec(),
+        _pD,  //  PARTICLE DATA
+        emitParticle = (loc,dir,prt,vel = 0) => {
+            _pD = particles[prt];
+            for(_ppI=0; _ppI<_pD[1]; _ppI++) {
+            dir = dir - _pD[4]/2 + Math.random()*_pD[4];
+                _pV.vFrD(dir).scl(_pD[0]+vel);
 
-        emitParticle = (ts,loc,dir,prt,vel = 0) => {
-            dir = dir - prt[4]/2 + Math.random()*prt[4];
-            _pV.vFrD(dir).scl(prt[0]+vel);
-
-            _P = {
-                type: 'particle',
-                x: loc.x,
-                y: loc.y,
-                vx: _pV.x,
-                vy: _pV.y,
-                w: prt[2],
-                h: prt[3],
-                //  angle
-                // dir: dir,
-                life: prt[5],
-                blend: prt[6]
-            }
-            particles.newObject(_P).id;
+                _P = {
+                    type: 'particle',
+                    name: prt,
+                    x: loc.x,
+                    y: loc.y,
+                    vx: _pV.x,
+                    vy: _pV.y,
+                    w: _pD[2],
+                    h: _pD[3],
+                    //  angle
+                    // dir: dir,
+                    life: _pD[5],
+                    blend: _pD[6]
+                }
+                particlePool.newObject(_P);
+            };
+            
             
         },
         updateParticle = (ts,p) => {
@@ -200,8 +207,15 @@
                 // ctx.beginPath();
                 // ctx.arc(0,0,O.w/2,0,Math.PI*2);
                 // ctx.fill();
-                ctx.rotate(PI/2)
-                    ctx.drawImage(images[O.sprite],-O.w/2-4,-O.h/2-4);
+                // console.log(O.hurt);
+                    ctx.rotate(PI/2)
+                    ctx.drawImage(images[O.sprite],
+                                    0,
+                                    O.hurt !== false ? 32 : 0,
+                                    24,24,
+                                    -O.w/2-4,
+                                    -O.h/2-4,
+                                    24,24);
                 break;
                 case 'pBullet':
                 case 'eBullet':
@@ -219,8 +233,19 @@
                     ctx.globalAlpha = O.life/O.mLife;
                     if(O.blend)
                         ctx.globalCompositeOperation =  O.blend;
-                    ctx.fillStyle = 'blue';
-                    ctx.fillRect(-O.w/2,-O.h/2,O.w,O.h);
+                    switch(O.name) {
+                        case 'splosion':
+                            ctx.fillStyle = 'red';
+                            ctx.beginPath();
+                            ctx.arc(0,0,O.w/2,0,Math.PI*2);
+                            ctx.fill();
+                        break;
+                        case 'thruster':
+                            ctx.fillStyle = 'blue';
+                            ctx.fillRect(-O.w/2,-O.h/2,O.w,O.h);
+                        break;
+                    }
+                    
                 break;
             }
             
@@ -355,8 +380,10 @@
         addShip = s => {
             images[s] = Canvas(64,64);
             drawShip(images[s].ctx,0,0,0,_o[9]);
+            drawShip(images[s].ctx,0,32,1,_o[9]);
 
-            bCtx.drawImage(images[s],0,0);
+
+            // bCtx.drawImage(images[s],0,0);
         },
         //  p = PALETTE
         //  INDEX FOR PALETTES LIST
@@ -423,6 +450,14 @@
     cam.size = e => {
         cam.w = cnv.width;
         cam.h = cnv.height;
+    };
+    cam.offScreen = o => {
+        if(o.pos.x < cam.pos.x
+        || o.pos.x > cam.pos.x + cam.w/scale
+        || o.pos.y < cam.pos.y
+        || o.pos.y > cam.pos.y + cam.h/scale)
+            return true;
+        else return false;
     };
 
     //  FOLLOW THE PLAYER
