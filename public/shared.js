@@ -2,6 +2,8 @@
 
 let server,  //  IS THIS INSTANCE THE SERVER
 	game, //  CACHED GAME OBJECT
+
+
 	
 	// ctx,  //  CANVAS DRAWING CONTEXT
 	_o,  //  CACHED OBJECT VARIABLE
@@ -14,6 +16,8 @@ let server,  //  IS THIS INSTANCE THE SERVER
 	_state,  //  SERVER GAME STATE TO SEND TO CLIENTS
 	_s, _sI,
 	_sTime = 0,  //  LAST TIME STATE WAS SENT
+	_pTime = 0,  //  LAT TIME POINTS WAS SENT
+	_points = [],
 	// _states,  //  ALL STATES EVER REVEIVED
 	input = [],  //  INPUT FOR ALL ON SERVER, OTHERS ON CLIENT
 	_actors = [],  //  AN ARRAY FOR ACTORS FOR STUPID REASONS
@@ -26,14 +30,14 @@ let server,  //  IS THIS INSTANCE THE SERVER
 	 _tV,  //  A TEMPORARY VECTOR USED FOR BULLETS AND MOVEMENT
 	// iID = 0,
 	_hit,  //  COLLISION VARIABLE
-	_hw,
+	_hw,  //  HALF WIDTHS
 
 	cList = [],  //  COLLISION LIST
 	cTypes = {},  //  THE TYPES OF OBJECTS COLLIDING
 	rnd = (val) => { return Math.floor(val*1000)/1000 },
 	_n, _d1, _d2,  //  NEAREST, DISTANCE TO
 	_dist, _dir,
-	_X,_Y,_Z,
+	_X,_Y,_W,_H,
 
 	nearestPlayer = obj => {
 		//  FOR EACH PLAYER
@@ -73,13 +77,19 @@ let server,  //  IS THIS INSTANCE THE SERVER
         switch(type) {
             //  PLAYER
             case 0:
-                _ship += 1+(Math.random()*3)|0;
-                _ship += 1+(Math.random()*3)|0;
+	            //  COCKPIT
+                _ship += (Math.random()*5)|0;
+                //  BODY
+                _ship += (Math.random()*5)|0;
+                //  WING
                 _ship += (Math.random()*10)|0;
+                //  THRUSTERS
                 _ship += 1+(Math.random()*3)|0;
+                //  PALETTE
+                // _ship += Math.random()*4|0;
             break;
             case 1:
-                _ship += 1;
+                _ship += 0;
                 _ship += (Math.random() > 0.5 ? 1 : 5);
                 _ship += (Math.random()*10)|0;
                 _ship += 4;
@@ -94,6 +104,13 @@ let server,  //  IS THIS INSTANCE THE SERVER
     	o1.collided(o2);
     	o2.collided(o1);
 		
+    },
+    _hInt,  //  HIT INTERVAL
+    gotHit = p => {
+    	_p = game.player;
+		cam.shake();
+		emitParticle(_p.pos,0,'splosion');
+        playBuffer('splode',1,Math.floor((_p.life/1000)*16)+40);
     };
 
 
@@ -108,6 +125,9 @@ class Game {
 		server = S;
 		game = this;
 		this.states = [];
+
+
+		this.pCol = 1,  //  PLAYER COLOUR PALETTES
 		//  CANVAS DRAWING CONTEXT, undefined ON SERVER
 
 		//  ID FOR THIS INSTANCE
@@ -149,12 +169,12 @@ class Game {
 		//  MAKE NEW PLAYER AND ASSIGN IT TO this.players
 		_p = this.players[id] = new Obj(id,p.socket,Math.random()*95,Math.random()*95);
 		this.actors[id] = _p;
-		if(server)
+		if(server) {
+			p.ship += this.pCol++;
+			if(this.pCol > 4) this.pCol = 1;
 			_p.sprite = p.ship;
-		// else console.log(_p.sprite)
-		// console.log(_p.sprite)
-
-
+			// console.log(_p.sprite)
+		}
 
 		//  THE CLIENT'S PLAYER
 		if(id === this.id) {
@@ -171,6 +191,7 @@ class Game {
 		if(server) this.sendState()
 	};
 	removeObj(id) {
+		// console.log('REMOVING ',id)
 		_p = game.actors[id];
 		if(_p && !_p.dead) {
 			switch(_p.type) {
@@ -181,6 +202,10 @@ class Game {
 						this.sendState();
 					}
 				break;
+				case 'enemy':
+					if(!server
+					&& _p.pos.dist(game.player.pos) < 1000)
+						playBuffer('splode',1,40);
 				default:
 					_p.release();
 				break;
@@ -229,6 +254,7 @@ class Game {
 		game.states.push(S);
 	};
 	applyState(S) {
+		// console.log('---- APPLY STATE')
 		// _states.push(S);
 		//  FOR EACH OBJECT INDEX IN THE STATE
 		for(_oI in S) {
@@ -265,8 +291,14 @@ class Game {
 						_p.life = _o[7];
 						_p.hurt = Date.now();
 						emitParticle(_p.pos,0,'splosion');
-						if(_oI === game.id)
-							cam.shake();
+						if(_oI === game.id) {
+							gotHit();
+
+							if(_p.life <= 0) {
+								_hInt = setInterval(gotHit,200);
+								setTimeout(()=> {clearInterval(_hInt)},2600);
+							}
+						} else playBuffer('hit',1,Math.floor((1-(_p.life/1000))*16)+40);
 					}
 
 				break;
@@ -277,8 +309,11 @@ class Game {
 						//  MAKE A NEW BULLET
 						_p = game.fireBullet(0,_o,_oI);
 						//  IF IT IS THE CLIENT PLAYER'S BULLET, SHAKE CAM
-						if(_o[5] === game.id)
+						if(_o[5] === game.id) {
 							cam.shake(game.player.dir);
+							// console.log(_oI)
+							playBuffer('shoot',0.1);
+						}
 					}
 				break;
 				case 'en':
@@ -291,6 +326,8 @@ class Game {
 						_p.life = _o[7];
 						_p.hurt = Date.now();
 						emitParticle(_p.pos,0,'splosion');
+						playBuffer('hit',1,Math.floor((1-(_p.life/1000))*16)+40);
+
 					}
 
 				break;
@@ -314,9 +351,8 @@ class Game {
 		//  REMOVE ANY OBJECTS NOT INCLUDED IN THE STATE
 		for(_pI in this.actors) {
 			_p = this.actors[_pI];
-			if(_p && !S[_pI]) {
+			if(_p && !S[_pI])
 				game.removeObj(_pI);
-			}			
 		}
 	};
 	//--  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --  --
@@ -463,6 +499,10 @@ class Game {
 					pID: p.id,
 					w: p.type === 'player' ? 12 : 8
 				})
+				game.actors[_b.id] = _b;
+
+				// console.log('firing',_b.id,_b.pID)
+				// _b.vel.scl(0.1)
 				// console.log(_b.type,'bullet id',_b.id);
 				// if(game.actors[_b.id])
 					// console.log('DOUBLING UP!!!',_b.id)
@@ -477,10 +517,11 @@ class Game {
 				id: id,
 				pID: b[5],
 				w: b[6] === 'pB' ? 12 : 8
-			})
+			});
+			game.actors[_b.id] = _b;
+
 		}
 		//  ADD BULLET TO ACTOR LIST
-		game.actors[_b.id] = _b;
 		return _b;		
 	};
 	//  FIND LOCATION TO SPAWN ENEMY THAT IS x PIXeLS AWAY FROM P,
@@ -522,8 +563,25 @@ class Game {
 			game.sendInput();
 		}
 		else {
-			if(gT - _sTime > 70)
+			// if(gT - _sTime > 50) {
+				// _sTime = gT;
 				game.sendState();
+			// }
+			if(gT - _pTime > 500) {
+				_pTime = gT;
+				_points = [];
+				for(_pI in game.players) {
+					_p = game.players[_pI];
+					_points.push([_p.points,_p.sprite[4]]);
+					_points.sort((a,b) => b[0]-a[0]);
+					// _points.push([_p.sprite[4]]);
+
+					// _points[_p.sprite[4]] = _p.points;
+				}
+				for(_pI in game.players)
+					game.players[_pI].socket.emit('score',_points);
+
+			}
 		}
 		
 	};
@@ -532,6 +590,7 @@ class Game {
 		
 		//  ON THE SERVER
 		if(server) {
+
 			//  FOR EACH ACTOR
 			for(_pI in game.actors) {
 				_p = game.actors[_pI];
@@ -605,6 +664,7 @@ class Game {
 			}
 		//  ON THE CLIENT
 		} else {
+			// updateSong(gT);
 	        // if(!game.player) return;
 	        particlePool.active.forEach(p => updateParticle(ts,p));
 
@@ -617,103 +677,84 @@ class Game {
 				_p.update(ts);
 
 				//  UPDATE OFFSCREEN ARROW POSITIONS
-				if(cam.offScreen(_p)) {
-					if(_p.id !== game.id && (_p.type === 'player' || _p.type === 'enemy')) {
-						_tV.copy(_p.pos).sub(game.player.pos);
-						//  ACTOR TO THE RIGHT OF PLAYER
-						if(_p.pos.x > game.player.pos.x) {
-							//  DISTANCE TO RIGHT SIDE OF SCREEN
-							_X = (cam.pos.x+cam.w/scale)-game.player.pos.x;
-								
+				// if(cam.offScreen(_p)) {
+				if(_p.id !== game.id && (_p.type === 'player' || _p.type === 'enemy')) {
+					_tV.copy(_p.pos).sub(game.player.pos);
+					//  SLOPE OF LINE TO PLAYER
+					//  _H IS BEING REUSED AND DOESN'T REPRESENT HEIGHT HERE
+					_H = _tV.x/_tV.y;
+					_W = _tV.y/_tV.x;
+					//  ACTOR TO THE RIGHT OF PLAYER
+					if(_p.pos.x > game.player.pos.x) {
+						//  DISTANCE TO RIGHT SIDE OF SCREEN
+						_X = (cam.pos.x+cam.w/scale)-game.player.pos.x;
+						
+						//  ACTOR BELOW PLAYER
+						if(_p.pos.y > game.player.pos.y) {
+							//  DISTANCE TO BOTTOM OF SCREEN
+							_Y = (cam.pos.y+cam.h/scale)-game.player.pos.y;
 							
-							//  ACTOR BELOW PLAYER
-							if(_p.pos.y > game.player.pos.y) {
-								//  DISTANCE TO BOTTOM OF SCREEN
-								_Y = (cam.pos.y+cam.h/scale)-game.player.pos.y;
-								//  SLOPE OF LINE TO PLAYER
-								_Z = _tV.x/_tV.y;
-								//  _X/_Z IS THE Y INTERCEPT
-								//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN BELOW THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
-								if(_X/_Z < _Y ) {
-									//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
-									_p.arrow.copy({x:_X,y:_X/_Z}).add(game.player.pos);
-									
-									// console.log;
-								//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE BOTTOM
-								} else {
-									//  I'M NOT SURE WHY I HAVE TO SWITCH IT
-									_Z = _tV.y/_tV.x;
-									_p.arrow.copy({x:_Y/_Z,y:_Y}).add(game.player.pos);
-								}
+							//  _X/_H IS THE Y INTERCEPT
+							//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN BELOW THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
+							if(_X/_H < _Y )
+								//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
+								_p.arrow.copy({x:_X,y:_X/_H});
+								
+							//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE BOTTOM
+							else _p.arrow.copy({x:_Y/_W,y:_Y});
 
-							//  ACTOR ABOVE PLAYER
-							} else {
-								//  DISTANCE TO TOP OF SCREEN
-								_Y = game.player.pos.y - cam.pos.y;
-								//  SLOPE OF LINE TO PLAYER
-								_Z = _tV.x/_tV.y;
-								//  _X/_Z IS THE Y INTERCEPT
-								//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN ABOVE THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
-								if(Math.abs(_X/_Z) < _Y ) {
-									//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
-									_p.arrow.copy({x:_X,y:_X/_Z}).add(game.player.pos);
-								//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE TOP
-								} else {
-									//  I'M NOT SURE WHY I HAVE TO SWITCH IT
-									_Z = _tV.y/_tV.x;
-									//  NEGATIVE VALUES IN HERE
-									_p.arrow.copy({x:-_Y/_Z,y:-_Y}).add(game.player.pos);
-								}
-							}
-						//  ACTOR TO THE LEFT OF PLAYER
+						//  ACTOR ABOVE PLAYER
 						} else {
-							//  DISTANCE TO LEFT SIDE OF SCREEN
-							_X = game.player.pos.x - cam.pos.x;
+							//  DISTANCE TO TOP OF SCREEN
+							_Y = game.player.pos.y - cam.pos.y;
 
-							//  ACTOR BELOW PLAYER
-							if(_p.pos.y > game.player.pos.y) {
-								//  DISTANCE TO BOTTOM OF SCREEN
-								_Y = (cam.pos.y+cam.h/scale)-game.player.pos.y;
-								//  SLOPE OF LINE TO PLAYER
-								_Z = _tV.x/_tV.y;
-								//  _X/_Z IS THE Y INTERCEPT
-								//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN BELOW THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
-								if(Math.abs(_X/_Z) < _Y ) {
-									//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
-									_p.arrow.copy({x:-_X,y:-_X/_Z}).add(game.player.pos);
-									
-									// console.log;
-								//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE BOTTOM
-								} else {
-									//  I'M NOT SURE WHY I HAVE TO SWITCH IT
-									_Z = _tV.y/_tV.x;
-									_p.arrow.copy({x:_Y/_Z,y:_Y}).add(game.player.pos);
-								}
-							//  ACTOR ABOVE PLAYER
-							} else {
-								//  DISTANCE TO TOP OF SCREEN
-								_Y = game.player.pos.y - cam.pos.y;
-								//  SLOPE OF LINE TO PLAYER
-								_Z = _tV.x/_tV.y;
-								//  _X/_Z IS THE Y INTERCEPT
-								//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN ABOVE THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
-								if(Math.abs(_X/_Z) < _Y ) {
-									//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
-									_p.arrow.copy({x:-_X,y:-_X/_Z}).add(game.player.pos);
-								//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE TOP
-								} else {
-									//  I'M NOT SURE WHY I HAVE TO SWITCH IT
-									_Z = _tV.y/_tV.x;
-									//  NEGATIVE VALUES IN HERE
-									_p.arrow.copy({x:-_Y/_Z,y:-_Y}).add(game.player.pos);
-								}
-							}
+							//  _X/_H IS THE Y INTERCEPT
+							//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN ABOVE THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
+							if(Math.abs(_X/_H) < _Y )
+								//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
+								_p.arrow.copy({x:_X,y:_X/_H});
+							//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE TOP
+							else _p.arrow.copy({x:-_Y/_W,y:-_Y});
 						}
-						//  THE DIRECTION IT IS POINTING (FOR AIMING AN ARROW)
-						_p.arrow.d = _tV.dir();
-						// _p.arrow.scl(0.8);
+					//  ACTOR TO THE LEFT OF PLAYER
+					} else {
+						//  DISTANCE TO LEFT SIDE OF SCREEN
+						_X = game.player.pos.x - cam.pos.x;
+
+						//  ACTOR BELOW PLAYER
+						if(_p.pos.y > game.player.pos.y) {
+							//  DISTANCE TO BOTTOM OF SCREEN
+							_Y = (cam.pos.y+cam.h/scale)-game.player.pos.y;
+							
+							//  _X/_H IS THE Y INTERCEPT
+							//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN BELOW THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
+							if(Math.abs(_X/_H) < _Y )
+								//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
+								_p.arrow.copy({x:-_X,y:-_X/_H});
+								
+								// console.log;
+							//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE BOTTOM
+							else _p.arrow.copy({x:_Y/_W,y:_Y});
+						//  ACTOR ABOVE PLAYER
+						} else {
+							//  DISTANCE TO TOP OF SCREEN
+							_Y = game.player.pos.y - cam.pos.y;
+							
+							//  _X/_H IS THE Y INTERCEPT
+							//  IF IT IS LESS THAN THE HEIGHT OF THE SCREEN ABOVE THE CHARACTER IT INTERSECTS WITH THE RIGHT SIDE
+							if(Math.abs(_X/_H) < _Y )
+								//  THIS IS THE Y INTERCEPT WITH THE RIGHT EDGE OF THE SCREEN
+								_p.arrow.copy({x:-_X,y:-_X/_H});
+							//  IF IT IS TALLER THAN THE HEIGHT OF THE SCREEN, IT WILL INTERCECT WITH THE TOP
+							else _p.arrow.copy({x:-_Y/_W,y:-_Y});
+						}
 					}
-				} else _p.arrow.d = null;
+					_p.arrow.scl(0.9).add(game.player.pos);
+					//  THE DIRECTION IT IS POINTING (FOR AIMING AN ARROW)
+					_p.arrow.d = _tV.dir();
+					// _p.arrow.scl(0.8);
+				}
+				// } else _p.arrow.d = null;
 			}
 			//  IF THERE ARE ANY STATES FROM THE SERVER
 			for(_sI=0; _sI < game.states.length; _sI++) {
@@ -736,40 +777,50 @@ class Game {
 	};
 	render() {
 		if(!game) return;
-		ctx.save();
-		ctx.scale(scale,scale);
 		ctx.fillStyle = 'rgb(20,20,20)';
 		ctx.fillRect(0,0,cam.w,cam.h);
+		
+		ctx.save();
+		ctx.scale(scale,scale);
 		ctx.translate(-cam.pos.x + cam.shk.x,-cam.pos.y + cam.shk.y);
+		// stars.forEach(star => {
+		// 	displayObj(star);
+		// })
+		cam.bg.forEach((bg,i) => {
+			ctx.drawImage(images.stars,
+				bg[0],bg[1],bg[2],bg[3],
+				i===0||i===2?cam.pos.x:cam.pos.x+bg[4],
+				i===0||i===1?cam.pos.y:cam.pos.y+bg[5],
+				bg[2],bg[3]);
+		})
+		// ctx.drawImage(images.stars,-512,0);
+		// ctx.drawImage(images.stars,-512,-512);
+		// ctx.drawImage(images.stars,0,-512);
+
 		
 
 		//  DRAW GRID FOR DEBUGGING
-		game.bp.drawBroadPhaseGrid(ctx);
+		// game.bp.drawBroadPhaseGrid(ctx);
 		// displayObj(game.stage);
 
 		// game.actors.forEach( a => displayObj(a) );
 		for(_pI in game.actors) {
 			_p = game.actors[_pI];
-			displayObj(_p);
+			if(!cam.offScreen(_p))
+				displayObj(_p);
+			else {
 
-			//  DRAW ARROWS
-			if((_p.type === 'enemy' || _p.type === 'player')&& _p.id !== game.id) {
-				// ctx.strokeStyle = 'green';
-				// ctx.beginPath();
-				// ctx.moveTo(game.player.pos.x,game.player.pos.y);
-				// ctx.lineTo(_p.pos.x,_p.pos.y);
-				// ctx.stroke();
-
-				if(_p.arrow.d) {
-					ctx.save()
-					ctx.fillStyle = 'green';
-					ctx.translate(_p.arrow.x,_p.arrow.y);
-					ctx.rotate(_p.arrow.d);
-					ctx.fillRect(-8,-8,16,16);
-					ctx.restore();
+				//  DRAW ARROWS THAT WE SPENT SO MANY BYTES CALCULATING THE LOCATION OF
+				if((_p.type === 'enemy' || _p.type === 'player')&& _p.id !== game.id) {
+					if(_p.arrow.d) {
+						ctx.save()
+						ctx.translate(_p.arrow.x,_p.arrow.y);
+						ctx.rotate(_p.arrow.d-PI/2);
+						ctx.drawImage(images.sprites,0,80,8,8,-8,-8,16,16);
+						ctx.restore();
+					}
 				}
-
-			}
+			};
 		}
 
 		particlePool.active.forEach(p => displayObj(p));
@@ -778,9 +829,15 @@ class Game {
 		ctx.restore();
 		ctx.fillStyle = 'white';
 		if(game.player) {
-			ctx.fillText(game.player.life,10,10);
+			// ctx.fillText(game.player.life,10,10);
 			// console.log(game.player.sprite)
-			// ctx.drawImage(images[game.player.sprite],0,0);
+			// ctx.drawImage(images.sprites,0,0,512,512);
+			for(_oI=0; _oI<_points.length; _oI++) {
+				_o = _points[_oI];
+				ctx.fillStyle = colours[palettes[_o[1]][1]];
+				// console.log(palettes[_o[1]][2]);
+				ctx.fillText(_o[0],10,10 + _oI*10);
+			}
 		}
 
 	};
@@ -866,12 +923,14 @@ class Vec {
 
 
 class Obj {
-	constructor(id,S,x,y,w,h) {
+	constructor(id,S,x,y,w,h,type) {
 		//  user REFERENCE FOR SERVER, undefined ON CLIENT INSTANCES
 		this.socket = S;
 		this.id = id || objID++;
 
-		this.type = 'player';
+		this.type = type || 'player';
+
+		this.points = 0;
 
 		this.life = 1000;
 		this.hurt = false;
@@ -929,6 +988,7 @@ class Obj {
 		this.type = o.type;
 		this.arrow.clr();
 		this.name = o.name;
+		this.lastHit = null;
 		// console.log(o.type,this.type)
 
 		this.life = o.life || 1000;
@@ -1007,11 +1067,12 @@ class Obj {
 				case 'player':
 					this.eTimer -= ts;
 					if(this.eTimer < 0) {
-						this.eTimer = 8000;
+						this.eTimer = 5000;
 						game.addEnemy(null,null,this);
 					}
-					if(this.life <= 0)
+					if(this.life <= 0) {
 						game.removeObj(this.id);
+					}
 				break;
 				case 'enemy':
 				// console.log(this)
@@ -1023,7 +1084,6 @@ class Obj {
 						// console.log('enemy died')
 						game.removeObj(this.id);
 						this.dead = true;
-
 					}
 					else this.ai(ts);
 				break;
@@ -1111,6 +1171,7 @@ class Obj {
 	collided(obj) {
 		// console.log('collided', this.id,obj.id)
 		// this.collidedWith[obj.id] = true;
+		_o = game.players[obj.pID || obj.id];
 
 		switch(this.type) {
 			case 'player':
@@ -1122,24 +1183,25 @@ class Obj {
 						// console.log(this.life);
 					// break;
 				// }
+				// this.lastHit = obj.pID || obj.id;
+				if(_o) _o.points += this.life <= 0 ? 1000 : 10;
 			break;
 			case 'enemy':
 			// console.log('enemy hit')
 				if(obj.type !== 'eBullet')
-					this.life -= 360;
+					this.life -= 124;
+				if(_o) _o.points += this.life <= 0 ? 100 : 10;
+				// this.lastHit = obj.pID || obj.id;
 			break;
 			case 'pBullet':
 			case 'eBullet':
-			// console.log('removing bullet',this.id)
+			// console.log('BULLET HIT',this.id,obj.id,'dead:',this.dead);
 			// console.log(Object.keys(game.actors));
 				// this.life = -1;
-				// console.log('BULLET HIT',this.id)
+				
 				if(!this.dead) {
-
-
 					game.removeObj(this.id);
 					this.dead = true;
-
 				}
 			// console.log(Object.keys(game.actors));
 
@@ -1543,3 +1605,11 @@ function createGameLoop() {
 
 
 
+
+
+// Generate a palette
+//  use -ss 30 -t 3 to skip 30 seconds and take the next 3
+// ffmpeg -y  -i sf3.mov -vf fps=24,scale=480:-1:flags=lanczos,palettegen palette.png
+
+//  Output a gif
+// ffmpeg -y -i sf3.mov -i palette.png -ss 10 -t 30 -filter_complex "fps=24,scale=480:-1:flags=lanczos[x];[x][1:v]paletteuse" sf3.gif
