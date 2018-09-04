@@ -703,7 +703,7 @@
         });
 
         socket.on('score',S => {
-            _points = S;
+            game._points = S;
             // console.log(_points);
         });
 
@@ -938,92 +938,92 @@
         _source.connect(_gain);
         _gain.connect(audioCtx.destination);
         _source.start();
-    },
-    playSong = (name) => {
-        //  CACHE SONG
-        _song = songs[name];
-        //  RESET SONG DATA
-        _beatTime = 0;
-        _beatIndex = 0;
-        _noteIndex = -1;
-        _beatFreq = 60/_song.bpm*1000;
-        _songParts = {};
-        _activeParts = [];
-        //  PUT ALL PARTS OF SONG INTO _songParts
-        for(_prtI=0; _prtI<_song.parts.length; _prtI++) {
-            _part = _song.parts[_prtI];
-            //  IF NO STARTING BEAT IS SPECEFIED, SET IT TO ZERO
-            if(!_part[5]) _part[5] = 0;
-            //  IF IT IS AN ARRAY, ADD MULTIPLE PARTS
-            if(_part[5].length) _part[5].forEach(p5 => addPart(p5,_part));
-            //  OTHERWISE, JUST ADD THE ONE
-            else addPart(_part[5],_part);
-            
-        }
-    },
-    addPart = (i,p) => {
-        // console.log(i,p)
-        p = p.slice();
-        p[5] = i;
-        //  IF IT DOESN'T ALREADY EXIST
-        //  CREATE ARRAY TO HOLD ANY PARTS THAT START ON THIS BEAT
-        if(!_songParts[i]) _songParts[i] = [];
-            
-        //  PUSH THIS PART TO THAT ARRAY
-        _songParts[i].push(p);
-    },
-    updateSong = (gT) => {
-        // console.log(gT)
-
-        //  CHECK IF WE'VE HIT THE NEXT NOTE YET
-        if(gT > _beatTime + _beatFreq/_song.npb) {
-            //  UPDATE TIMING AND INDEX
-            _beatTime = gT;
-            _noteIndex++;
-            //  IF THE NOTE INDEX IS EQUAL TO THE NUMBER OF NOTES PER BEAT npb
-            if(_noteIndex === _song.npb) {
-                //  CHECK FOR NEW PARTS STARTING AT THIS BEAT
-                if(_songParts[_beatIndex]) {
-                    //  ITERATE THROUGH SONG PARTS STARTING NOW
-                    _songParts[_beatIndex].forEach((part)=>{
-                        //  IF IT ISN'T ALREADY A MEMBER
-                        // if(_activeParts.indexOf(part) === -1)
-                            //  PUSH IT TO TEH ACTIVE PARTS LIST
-                            _activeParts.push(part)
-                    });
-                    // console.log(_activeParts.length);
-                };
-                //  INCREMENT THE BEAT COUNTER AND SET THE NOTE COUNTER TO ZERO
-                _beatIndex++;
-                _noteIndex = 0;
-            };
-
-            //  CHECK ACTIVE PARTS
-            if(_activeParts.length) {
-                //  ITERATE THROUGH PART LIST
-                for(_prtI=0; _prtI<_activeParts.length; _prtI++) {
-                    //  THE PART IN QUESTION
-                    _part = _activeParts[_prtI];
-                    //  THE MOTIF IT IS PLAYING
-                    _motif = motifs[_part[1]];
-                    //  THE LENGTH OF THE MOTIF SCALED TO THE SONG AND PART SPEEDS
-                    _L = _motif.length *_song.npb *_part[3]/_song.npb;
-                    //  THE NOTE NUMBER RELATIVE TO THE START OF HTE PART
-                    _I = _noteIndex + (_beatIndex -_part[5])*_song.npb;
-                    //  THE NOTE (IF ANY) THIS PART SHOULD PLAY NOW
-                    _note = _motif[(_I%_L)/_part[3]];
-                    //  IF THERE IS A NOTE PLAY IT
-                    if(_note >= 0) playBuffer(_part[0],0.5,_part[2]+_note);
-                    //  IF THE LOCAL NOTE INDEX IS PAST THE PART LENGTH TIMES REPEATS
-                    if(_I >= _L * ((_part[4]||0)+1) -1 ) {
-                        //  REMOVE FROM ACTIVE PARTS, DECREMENT COUNTER TO STAY IN LINE
-                        _activeParts.splice(_prtI,1);
-                        _prtI--;
-                    }                   
-                }
-            }
-        }
     };
+    // playSong = (name) => {
+    //     //  CACHE SONG
+    //     _song = songs[name];
+    //     //  RESET SONG DATA
+    //     _beatTime = 0;
+    //     _beatIndex = 0;
+    //     _noteIndex = -1;
+    //     _beatFreq = 60/_song.bpm*1000;
+    //     _songParts = {};
+    //     _activeParts = [];
+    //     //  PUT ALL PARTS OF SONG INTO _songParts
+    //     for(_prtI=0; _prtI<_song.parts.length; _prtI++) {
+    //         _part = _song.parts[_prtI];
+    //         //  IF NO STARTING BEAT IS SPECEFIED, SET IT TO ZERO
+    //         if(!_part[5]) _part[5] = 0;
+    //         //  IF IT IS AN ARRAY, ADD MULTIPLE PARTS
+    //         if(_part[5].length) _part[5].forEach(p5 => addPart(p5,_part));
+    //         //  OTHERWISE, JUST ADD THE ONE
+    //         else addPart(_part[5],_part);
+            
+    //     }
+    // },
+    // // addPart = (i,p) => {
+    // //     // console.log(i,p)
+    // //     p = p.slice();
+    // //     p[5] = i;
+    // //     //  IF IT DOESN'T ALREADY EXIST
+    // //     //  CREATE ARRAY TO HOLD ANY PARTS THAT START ON THIS BEAT
+    // //     if(!_songParts[i]) _songParts[i] = [];
+            
+    // //     //  PUSH THIS PART TO THAT ARRAY
+    // //     _songParts[i].push(p);
+    // // },
+    // updateSong = (gT) => {
+    //     // console.log(gT)
+
+    //     //  CHECK IF WE'VE HIT THE NEXT NOTE YET
+    //     if(gT > _beatTime + _beatFreq/_song.npb) {
+    //         //  UPDATE TIMING AND INDEX
+    //         _beatTime = gT;
+    //         _noteIndex++;
+    //         //  IF THE NOTE INDEX IS EQUAL TO THE NUMBER OF NOTES PER BEAT npb
+    //         if(_noteIndex === _song.npb) {
+    //             //  CHECK FOR NEW PARTS STARTING AT THIS BEAT
+    //             if(_songParts[_beatIndex]) {
+    //                 //  ITERATE THROUGH SONG PARTS STARTING NOW
+    //                 _songParts[_beatIndex].forEach((part)=>{
+    //                     //  IF IT ISN'T ALREADY A MEMBER
+    //                     // if(_activeParts.indexOf(part) === -1)
+    //                         //  PUSH IT TO TEH ACTIVE PARTS LIST
+    //                         _activeParts.push(part)
+    //                 });
+    //                 // console.log(_activeParts.length);
+    //             };
+    //             //  INCREMENT THE BEAT COUNTER AND SET THE NOTE COUNTER TO ZERO
+    //             _beatIndex++;
+    //             _noteIndex = 0;
+    //         };
+
+    //         //  CHECK ACTIVE PARTS
+    //         if(_activeParts.length) {
+    //             //  ITERATE THROUGH PART LIST
+    //             for(_prtI=0; _prtI<_activeParts.length; _prtI++) {
+    //                 //  THE PART IN QUESTION
+    //                 _part = _activeParts[_prtI];
+    //                 //  THE MOTIF IT IS PLAYING
+    //                 _motif = motifs[_part[1]];
+    //                 //  THE LENGTH OF THE MOTIF SCALED TO THE SONG AND PART SPEEDS
+    //                 _L = _motif.length *_song.npb *_part[3]/_song.npb;
+    //                 //  THE NOTE NUMBER RELATIVE TO THE START OF HTE PART
+    //                 _I = _noteIndex + (_beatIndex -_part[5])*_song.npb;
+    //                 //  THE NOTE (IF ANY) THIS PART SHOULD PLAY NOW
+    //                 _note = _motif[(_I%_L)/_part[3]];
+    //                 //  IF THERE IS A NOTE PLAY IT
+    //                 if(_note >= 0) playBuffer(_part[0],0.5,_part[2]+_note);
+    //                 //  IF THE LOCAL NOTE INDEX IS PAST THE PART LENGTH TIMES REPEATS
+    //                 if(_I >= _L * ((_part[4]||0)+1) -1 ) {
+    //                     //  REMOVE FROM ACTIVE PARTS, DECREMENT COUNTER TO STAY IN LINE
+    //                     _activeParts.splice(_prtI,1);
+    //                     _prtI--;
+    //                 }                   
+    //             }
+    //         }
+    //     }
+    // };
 
     
 

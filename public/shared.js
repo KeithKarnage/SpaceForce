@@ -17,7 +17,6 @@ let server,  //  IS THIS INSTANCE THE SERVER
 	_s, _sI,
 	_sTime = 0,  //  LAST TIME STATE WAS SENT
 	_pTime = 0,  //  LAT TIME POINTS WAS SENT
-	_points = [],
 	// _states,  //  ALL STATES EVER REVEIVED
 	input = [],  //  INPUT FOR ALL ON SERVER, OTHERS ON CLIENT
 	_actors = [],  //  AN ARRAY FOR ACTORS FOR STUPID REASONS
@@ -125,6 +124,7 @@ class Game {
 		server = S;
 		game = this;
 		this.states = [];
+		this._points = [];
 
 
 		this.pCol = 1,  //  PLAYER COLOUR PALETTES
@@ -569,17 +569,17 @@ class Game {
 			// }
 			if(gT - _pTime > 500) {
 				_pTime = gT;
-				_points = [];
+				game._points = [];
 				for(_pI in game.players) {
 					_p = game.players[_pI];
-					_points.push([_p.points,_p.sprite[4]]);
-					_points.sort((a,b) => b[0]-a[0]);
-					// _points.push([_p.sprite[4]]);
+					game._points.push([_p.points,_p.sprite[4]]);
+					game._points.sort((a,b) => b[0]-a[0]);
+					// game._points.push([_p.sprite[4]]);
 
-					// _points[_p.sprite[4]] = _p.points;
+					// game._points[_p.sprite[4]] = _p.points;
 				}
 				for(_pI in game.players)
-					game.players[_pI].socket.emit('score',_points);
+					game.players[_pI].socket.emit('score',game._points);
 
 			}
 		}
@@ -832,8 +832,8 @@ class Game {
 			// ctx.fillText(game.player.life,10,10);
 			// console.log(game.player.sprite)
 			// ctx.drawImage(images.sprites,0,0,512,512);
-			for(_oI=0; _oI<_points.length; _oI++) {
-				_o = _points[_oI];
+			for(_oI=0; _oI<game._points.length; _oI++) {
+				_o = game._points[_oI];
 				ctx.fillStyle = colours[palettes[_o[1]][1]];
 				// console.log(palettes[_o[1]][2]);
 				ctx.fillText(_o[0],10,10 + _oI*10);
