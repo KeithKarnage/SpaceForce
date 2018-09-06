@@ -3,6 +3,7 @@
 // (function () {
 
     let socket, //Socket.IO client
+    message = 'test',
         title = document.getElementById('title'),
         randBtn = document.getElementById('random'),
         playBtn = document.getElementById('play'),
@@ -88,15 +89,14 @@
         touchStart = [null,null],
         touchIDs = [null,null],
         _t,_tI,_tP,_tID,  //  TOUCH, TOUCH INDEX, POSITION, AND ID
-        pDef = e => e.preventDefault(),
         keyH = e => {
-            pDef(e);
+            e.preventDefault();
             keys[e.keyCode] = e.type;
             if(e.type === 'keyup')
                 delete keys[e.keyCode];
         },
         mouseH = e => {
-            // pDef(e);
+            // e.preventDefault();
             switch(e.type) {
                 case "mousedown":
                     if(!audioCtx) {
@@ -119,22 +119,32 @@
             }
         },
         touchH = e => {
-            pDef(e);
+            e.preventDefault();
+
             if(!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 startAudio();
             }
             //  IF A GAME ISN'T INSTANTIATED
-            if(!game) join(e);
+            if(!game && e.type !== 'touchend') join(e);
 
             //  STORE AND UPDATE ALL CHANGED TOUCHES
             //  FOR EACH TOUCH
+            message = null;
+
+                // console.log(e)
             for(_tI in e.changedTouches) {
+                
+
                 _t = e.changedTouches[_tI];
                 _tID = _t.identifier;
+                // message = _t[0];
                 
                 //  USE IDENTIFIER AS KEY IN touches
-                if(_tID) {
+                // console.log(_tID)
+                if(_tID || _tID === 0) {
+                    // console.log('tID',_tID)
+
                     //  DELETE ENDED TOUCHES
                     if(e.type === 'touchend')
                         delete touches[_tID];
@@ -147,7 +157,7 @@
             touchIDs.forEach((id,i) => {
                 //  IF IT ISN'T EQUAL TO NULL AND THE ID
                 //  THAT IS THERE ISN'T IN touches, SET IT TO NULL
-                if(id
+                if(id !== null
                 && !touches[id]) {
                     // console.log('setting to null')
                     touchIDs[i] = null;
@@ -160,19 +170,26 @@
                 _t = touches[_tI];
                 _tID = _t.identifier;
                 //  LEFT SIDE OF SCREEN
+
                 // console.log(touchPos(_t),cam.w/scale/2)
                 if(touchPos(_t).x < cam.w/scale/2) {
-                    if(!touchIDs[0]) {
+                console.log('left',touchIDs[0])
+
+                    if(touchIDs[0] === null) {
                         touchStart[0] = touchPos(_t);
                         touchIDs[0] = _tID;
-                        // console.log(touchStart[0])
+                        console.log(touchStart[0])
                     }
+                    // console.log(touchIDs[0],touchIDs[1]);
                 //  RIGHT SIDE OF SCREEN
                 } else {
-                    if(!touchIDs[1]) {
+                // console.log('right')
+
+                    if(touchIDs[1] === null) {
                         touchStart[1] = touchPos(_t);
                         touchIDs[1] = _tID;
                     }
+                    // console.log(touchIDs[0],touchIDs[1]);
                 }
                 //  IF IT IS NOT IN touchIDs AND EITHER IS NULL
                 //  IT BECOMES THE NEW FIRST OR SECOND TOUCH
@@ -645,10 +662,14 @@
     db.onmousemove = mouseH;
     db.onmouseup = mouseH;
 
-    db.ontouchstart = touchH;
+    // db.ontouchstart = touchH;
     // db.ontouchmove = touchH;
+
+    db.addEventListener('touchstart',touchH,{passive:false});
     db.addEventListener('touchmove',touchH,{passive:false});
-    db.ontouchend = touchH;
+    db.addEventListener('touchend',touchH,{passive:false});
+
+    // db.ontouchend = touchH;
 
     // setTimeout(() => {
     //     cnv.onclick = () => {
@@ -704,7 +725,7 @@
 
         socket.on('score',S => {
             game._points = S;
-            // console.log(_points);
+            // console.log(S);
         });
 
         socket.on("end", () => {

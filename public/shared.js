@@ -15,8 +15,8 @@ let server,  //  IS THIS INSTANCE THE SERVER
 	objID = 0,  //  OBJECT ID VARIABLE
 	_state,  //  SERVER GAME STATE TO SEND TO CLIENTS
 	_s, _sI,
-	_sTime = 0,  //  LAST TIME STATE WAS SENT
-	_pTime = 0,  //  LAT TIME POINTS WAS SENT
+	// _sTime = 0,  //  LAST TIME STATE WAS SENT
+	
 	// _states,  //  ALL STATES EVER REVEIVED
 	input = [],  //  INPUT FOR ALL ON SERVER, OTHERS ON CLIENT
 	_actors = [],  //  AN ARRAY FOR ACTORS FOR STUPID REASONS
@@ -39,12 +39,13 @@ let server,  //  IS THIS INSTANCE THE SERVER
 	_X,_Y,_W,_H,
 
 	nearestPlayer = obj => {
+
+		_n = null;
 		//  FOR EACH PLAYER
 		for(_pI in game.players) {
 			//  TEH PLYER
 			_p = game.players[_pI];
 			//  IT'S CURRENT NEAREST IS IT'S TARGET
-			_n = null;
 			// if(obj.target)
 				// _n = obj.target;
 			//  MAKE SURE PLAYER EXISTS
@@ -125,6 +126,9 @@ class Game {
 		game = this;
 		this.states = [];
 		this._points = [];
+		this._pTime = 0,  //  LAST TIME POINTS WAS SENT
+
+		this._eTime = 2000,
 
 
 		this.pCol = 1,  //  PLAYER COLOUR PALETTES
@@ -385,7 +389,7 @@ class Game {
 
 		//  IF THERE IS A FIRST TOUCH
 		_tID = touchIDs[0];
-		if(_tID) {
+		if(_tID !== null) {
 			//  THE TOUCH
 			_t = touches[_tID];
 			//  THE TOUCHES POSITION
@@ -422,11 +426,17 @@ class Game {
         
         //  IF THERE IS A TOUCH ON THE RIGHT SIDE
         _tID = touchIDs[1];
-        if(_tID) {
+        if(_tID !== null) {
+
         	_t = touches[_tID];
+
         	_tP = touchPos(_t);
+
 			//  SET FIFTH INPUT TO TOUCH POSITION MINUS TOUCH START, DIRECTION
 	        cInput[4] = _tP.sub(touchStart[1]).dir();
+	        // console.log(touchStart[1]);
+	        // console.log(cInput[4] )
+
 	    //  NO TOUCHES ON RIGHT SIDE
         } else {
         	//  IF THEY ARE NOT FIRING SET THE FACING DIRECTION TO THE DIRECTION OF MOVEMENT
@@ -533,7 +543,7 @@ class Game {
 			_p = game.players[_pI];
 			if(_tV.dist(_p.pos)<250)
 				return false;
-		} return [_tV.x,_tV.y];
+		} return [_tV.x,_tV.y,_tV.dir()];
 	};
 	addEnemy(o,id,P) {
 		if(P) {
@@ -541,16 +551,20 @@ class Game {
 			randomShip(1);
 		};
 		if(o) {
-			_p = game.objPool.newObject({
-				type: 'enemy',
-				x: o[0],
-				y: o[1],
-				id: id,
-				w: 16,
-				sprite: _ship
-			})
-			// console.log('enemy added',_p.id);
-			game.actors[_p.id] = _p;
+			// for(_iI=0; _iI<3; _iI++) {
+				// _tV.vFrD(o[2]).scl(80);
+				_p = game.objPool.newObject({
+					type: 'enemy',
+					x: o[0],
+					y: o[1],
+					id: id,
+					w: 16,
+					sprite: _ship
+				})
+				// console.log('enemy added',_p.id);
+				if(P) _p.vel.copy(P.vel);
+				game.actors[_p.id] = _p;
+			// }
 		}
 	};
 	
@@ -567,8 +581,8 @@ class Game {
 				// _sTime = gT;
 				game.sendState();
 			// }
-			if(gT - _pTime > 500) {
-				_pTime = gT;
+			if(gT - game._pTime > 500) {
+				game._pTime = gT;
 				game._points = [];
 				for(_pI in game.players) {
 					_p = game.players[_pI];
@@ -590,6 +604,14 @@ class Game {
 		
 		//  ON THE SERVER
 		if(server) {
+			game._eTime -= ts;
+			if(game._eTime <= 0) {
+				game._eTime = 5000;
+				//  REUSING ACTORS
+				_actors = Object.keys(game.players);
+				game.addEnemy(null,null,game.players[_actors[Math.random()*_actors.length|0]]);
+			}
+
 
 			//  FOR EACH ACTOR
 			for(_pI in game.actors) {
@@ -829,15 +851,18 @@ class Game {
 		ctx.restore();
 		ctx.fillStyle = 'white';
 		if(game.player) {
-			// ctx.fillText(game.player.life,10,10);
 			// console.log(game.player.sprite)
 			// ctx.drawImage(images.sprites,0,0,512,512);
 			for(_oI=0; _oI<game._points.length; _oI++) {
 				_o = game._points[_oI];
 				ctx.fillStyle = colours[palettes[_o[1]][1]];
 				// console.log(palettes[_o[1]][2]);
-				ctx.fillText(_o[0],10,10 + _oI*10);
+				ctx.font = Math.floor(scale*10)+'px '+'Arial';
+				ctx.fillText(_o[0],10,30 + _oI*Math.floor(scale*10));
 			}
+			ctx.fillText(game.player.life,10,100);
+			ctx.fillText(message,100,100);
+
 		}
 
 	};
@@ -968,7 +993,7 @@ class Obj {
 		this.fSpeed = 200;
 		this.fTime = 0;
 
-		this.eTimer = 2000;
+		// this.eTimer = 2000;
 
 		//  INPUT THIS CYCLE
 		//  GETS REUSED FOR PARENT ID
@@ -1065,11 +1090,11 @@ class Obj {
 					}
 				break;
 				case 'player':
-					this.eTimer -= ts;
-					if(this.eTimer < 0) {
-						this.eTimer = 5000;
-						game.addEnemy(null,null,this);
-					}
+					// this.eTimer -= ts;
+					// if(this.eTimer < 0) {
+					// 	this.eTimer = 5000;
+					// 	game.addEnemy(null,null,this);
+					// }
 					if(this.life <= 0) {
 						game.removeObj(this.id);
 					}
@@ -1166,7 +1191,7 @@ class Obj {
 			this._in[3] = _tV.y;
 			this._in[4] = _tV.dir();
 			this.processInput(this._in,ts);
-		} else this.vel.scale(0.8);
+		} //else this.vel.scl(0.8);
 	};
 	collided(obj) {
 		// console.log('collided', this.id,obj.id)
