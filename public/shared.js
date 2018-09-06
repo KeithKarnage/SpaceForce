@@ -799,7 +799,7 @@ class Game {
 	};
 	render() {
 		if(!game) return;
-		ctx.fillStyle = 'rgb(20,20,20)';
+		ctx.fillStyle = colours[16];
 		ctx.fillRect(0,0,cam.w,cam.h);
 		
 		ctx.save();
@@ -838,7 +838,7 @@ class Game {
 						ctx.save()
 						ctx.translate(_p.arrow.x,_p.arrow.y);
 						ctx.rotate(_p.arrow.d-PI/2);
-						ctx.drawImage(images.sprites,0,80,8,8,-8,-8,16,16);
+						ctx.drawImage(images.sprites,_p.sprite[4]*8||0,80,8,8,-8,-8,16,16);
 						ctx.restore();
 					}
 				}
@@ -852,7 +852,7 @@ class Game {
 		ctx.fillStyle = 'white';
 		if(game.player) {
 			// console.log(game.player.sprite)
-			// ctx.drawImage(images.sprites,0,0,512,512);
+			ctx.drawImage(images.sprites,0,0,512,512);
 			for(_oI=0; _oI<game._points.length; _oI++) {
 				_o = game._points[_oI];
 				ctx.fillStyle = colours[palettes[_o[1]][1]];
@@ -1021,7 +1021,7 @@ class Obj {
 		this.dead = false;
 
 		this.mLife = o.life;
-		this.blend = o.blend;
+
 		this.dir = o.dir || 0;
 
 		this.pos.copy(o);
@@ -1120,7 +1120,7 @@ class Obj {
 			if(this.type === 'player' || this.type === 'enemy') {
 				// console.log(this.input)
 				if(this.input)
-					emitParticle(_tV.vFrD(this.dir).unit().scl(-12).add(this.pos),this.axis.dir(),'thruster',this.vel.mag()* -1);
+					emitParticle(_tV.vFrD(this.dir).unit().scl(-8).add(this.pos),this.axis.dir(),'thruster',this.vel.mag()* -1);
 			}
 		}
 		//  HURT TIMER

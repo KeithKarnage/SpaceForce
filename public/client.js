@@ -42,8 +42,8 @@
 
         //  v,count,w,h,angle,life,blend
         particles = {
-            thruster: [-1,1,10,6, 0.2,500,'screen'],
-            splosion: [ 1,8, 12,12,PI*2,200,'screen'],
+            thruster: [-1,1,5,8, 0.2,500,[6,5,4]],
+            splosion: [ 1,8, 12,12,PI*2,200,[3,2,15,10,7]],
         },
         particlePool = ObjectPool(Obj),
         _P,_ppI, _pV = vec(),
@@ -64,9 +64,11 @@
                     w: _pD[2],
                     h: _pD[3],
                     //  angle
-                    // dir: dir,
+                    dir: _pV.dir(),
+                    
                     life: _pD[5],
-                    blend: _pD[6]
+                    //  REUSE sprite TO HOLD COLOUR SEQUENCE FOR PARTICLE
+                    sprite: _pD[6],
                 }
                 particlePool.newObject(_P);
             };
@@ -78,6 +80,8 @@
             if(p.life < 0)
                 p.release();
             p.pos.add(p.vel);
+            //  REUSE acc [ACCELERATION] TO KEEP TRACK OF LIFE 0-1
+            p.acc = p.life/p.mLife;
         },
         stars = [],
 
@@ -170,26 +174,19 @@
                 _t = touches[_tI];
                 _tID = _t.identifier;
                 //  LEFT SIDE OF SCREEN
-
-                // console.log(touchPos(_t),cam.w/scale/2)
                 if(touchPos(_t).x < cam.w/scale/2) {
-                console.log('left',touchIDs[0])
 
                     if(touchIDs[0] === null) {
                         touchStart[0] = touchPos(_t);
                         touchIDs[0] = _tID;
-                        console.log(touchStart[0])
                     }
-                    // console.log(touchIDs[0],touchIDs[1]);
                 //  RIGHT SIDE OF SCREEN
                 } else {
-                // console.log('right')
 
                     if(touchIDs[1] === null) {
                         touchStart[1] = touchPos(_t);
                         touchIDs[1] = _tID;
                     }
-                    // console.log(touchIDs[0],touchIDs[1]);
                 }
                 //  IF IT IS NOT IN touchIDs AND EITHER IS NULL
                 //  IT BECOMES THE NEW FIRST OR SECOND TOUCH
@@ -255,7 +252,6 @@
                     // ctx.beginPath();
                     // ctx.arc(0,0,O.w/2,0,Math.PI*2);
                     // ctx.fill();
-
                     ctx.drawImage(images.sprites,
                                     0,
                                     O.type === 'pBullet' ? 0 : 32,
@@ -267,18 +263,24 @@
                     // ctx.fillText(O.id,0,0)
                 break;
                 case 'particle':
-                    ctx.globalAlpha = O.life/O.mLife;
-                    if(O.blend)
-                        ctx.globalCompositeOperation =  O.blend;
+                    ctx.globalAlpha = O.acc;
+                    ctx.globalCompositeOperation =  'screen';
+
+                    // if(O.blend)
+                        // ctx.globalCompositeOperation =  O.blend;
+                    ctx.fillStyle = colours[O.sprite[O.acc*O.sprite.length|0]]
+                    // console.log(O.sprite)
                     switch(O.name) {
                         case 'splosion':
-                            ctx.fillStyle = 'red';
+                            // ctx.fillStyle = 'red';
+                    // ctx.globalCompositeOperation =  'screen';
+
                             ctx.beginPath();
                             ctx.arc(0,0,O.w/2,0,Math.PI*2);
                             ctx.fill();
                         break;
                         case 'thruster':
-                            ctx.fillStyle = 'blue';
+                            // ctx.fillStyle = 'blue';
                             ctx.fillRect(-O.w/2,-O.h/2,O.w,O.h);
                         break;
                     }
@@ -402,12 +404,7 @@
 
         ],
         _g,_x,_y,_plt,
-        //  o[0] = x
-        //  o[1] = y
-        //  o[2] = panel
-        //  o[3] = palette
-        //  o[4] = flip x, undefined = NO, number = OFFSET
-        //  o[5] = flip y
+        
         palettes = [
             //  0 - WHITE SHIPS
             [0,1,2,3,1,4,5,6,6],
@@ -429,6 +426,12 @@
             [0],
 
         ],
+        //  o[0] = x
+        //  o[1] = y
+        //  o[2] = panel
+        //  o[3] = palette
+        //  o[4] = flip x, undefined = NO, number = OFFSET
+        //  o[5] = flip y
         graph = (c,o) => {
             // console.log(o)
             _g = graphs;
@@ -469,12 +472,30 @@
                     _ctx.fill();
                 }    
             };
-            for(_i=0; _i<6; _i++) {
-                graph(_ctx,[2 + _i*8,82,20,_i+6,-1]);
-                if(_i > 0)
-                    graph(_ctx,[2 + _i*8,75,20,_i+6,-1,1]);
+            //  ARROWS AND STARS
+            for(_i=0; _i<5; _i++) {
+                //  ARROWS
+                graph(_ctx,[2 + _i*8,82,20,_i,-1]);
+                //  STARS
+                graph(_ctx,[2 + _i*8,90,20,_i+7,-1]);
+                if(_i == 0)
+                    graph(_ctx,[2 + _i*8,83,20,7,-1,1]);
 
-            }
+            };
+            //  DRAW STAR FIELD
+            for(_i=0; _i<32; _i++) {
+                for(_iI=0; _iI<32; _iI++) {
+                        _o = [ Math.random()*5|0,
+                                Math.random()*28|0 + 32*_i,
+                                Math.random()*28|0 + 32*_iI]
+                        _ctx = images.stars.ctx;
+                        // console.log(_o)
+                        _ctx.drawImage(images.sprites,8+8*_o[0],90,8,8,_o[1],_o[2],8,8);
+                    // }
+                    // stars.push(star);
+                    // console.log(star.pos);
+                }
+            };
             
         },
         addShip = s => {
@@ -529,20 +550,7 @@
     setTimeout(randomPlayer,200);
 
     circles(0,[1,0]);
-
-    for(_i=0; _i<32; _i++) {
-        for(_iI=0; _iI<32; _iI++) {
-                _o = [ Math.random()*5|0,
-                        Math.random()*28|0 + 32*_i,
-                        Math.random()*28|0 + 32*_iI]
-                _ctx = images.stars.ctx;
-                // console.log(_o)
-                _ctx.drawImage(images.sprites,8+8*_o[0],80,8,8,_o[1],_o[2],8,8);
-            // }
-            // stars.push(star);
-            // console.log(star.pos);
-        }
-    }
+    
 
 
 
