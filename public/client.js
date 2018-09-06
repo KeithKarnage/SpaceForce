@@ -42,8 +42,8 @@
 
         //  v,count,w,h,angle,life,blend
         particles = {
-            thruster: [-1,1,5,8, 0.2,500,[6,5,4]],
-            splosion: [ 1,8, 12,12,PI*2,200,[3,2,15,10,7]],
+            thruster: [-0.5,1,5,8, 0.2,500,[6,5,4]],
+            splosion: [ 0.5,8, 12,12,PI*2,200,[3,2,15,10,7]],
         },
         particlePool = ObjectPool(Obj),
         _P,_ppI, _pV = vec(),

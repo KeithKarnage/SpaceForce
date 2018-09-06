@@ -852,7 +852,7 @@ class Game {
 		ctx.fillStyle = 'white';
 		if(game.player) {
 			// console.log(game.player.sprite)
-			ctx.drawImage(images.sprites,0,0,512,512);
+			// ctx.drawImage(images.sprites,0,0,512,512);
 			for(_oI=0; _oI<game._points.length; _oI++) {
 				_o = game._points[_oI];
 				ctx.fillStyle = colours[palettes[_o[1]][1]];
@@ -860,8 +860,8 @@ class Game {
 				ctx.font = Math.floor(scale*10)+'px '+'Arial';
 				ctx.fillText(_o[0],10,30 + _oI*Math.floor(scale*10));
 			}
-			ctx.fillText(game.player.life,10,100);
-			ctx.fillText(message,100,100);
+			// ctx.fillText(game.player.life,10,100);
+			// ctx.fillText(message,100,100);
 
 		}
 
