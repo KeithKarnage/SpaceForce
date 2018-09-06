@@ -208,11 +208,19 @@ class Game {
 				break;
 				case 'enemy':
 					if(!server
-					&& _p.pos.dist(game.player.pos) < 1000)
+					&& _p.pos.dist(game.player.pos) < 500)
 						playBuffer('splode',1,40);
+					// _p.release();
+				// break;
 				default:
+					// if(!server
+					// && _p.pos.dist(game.player.pos) < 1000)
+					// 	// playBuffer('shoot',0.1,86);
 					_p.release();
 				break;
+				// default:
+					// _p.release();
+				// break;
 			}
 		}
 		delete game.actors[id];
@@ -293,17 +301,21 @@ class Game {
 					//  IF IT IS THE CLIENT'S PLAYER AND THEY TOOK DAMAGE
 					if(_o[7] < _p.life) {
 						_p.life = _o[7];
+						
 						_p.hurt = Date.now();
 						emitParticle(_p.pos,0,'splosion');
 						if(_oI === game.id) {
 							gotHit();
 
+							//  END GAME EXPLOSIONS
 							if(_p.life <= 0) {
 								_hInt = setInterval(gotHit,200);
 								setTimeout(()=> {clearInterval(_hInt)},2600);
 							}
 						} else playBuffer('hit',1,Math.floor((1-(_p.life/1000))*16)+40);
 					}
+					_p.life = _o[7];
+
 
 				break;
 				case 'pB':
@@ -314,10 +326,11 @@ class Game {
 						_p = game.fireBullet(0,_o,_oI);
 						//  IF IT IS THE CLIENT PLAYER'S BULLET, SHAKE CAM
 						if(_o[5] === game.id) {
-							cam.shake(game.player.dir);
+							cam.shake(game.player.dir +0.001);
 							// console.log(_oI)
-							playBuffer('shoot',0.1);
+							
 						}
+						playBuffer('shoot',0.1,(_o[6]==='eB'?76:80));
 					}
 				break;
 				case 'en':
@@ -375,8 +388,9 @@ class Game {
         cInput = [socket.id,0,0,0,null];
 
         //  IF MOUSE IS PRESSED, SPACE BAR IS PRESSED, OR A SECOND TOUCH IS HAPPENING
-		if(mouse.pressed  || keys[32] || touchIDs[1])
+		if(mouse.pressed || touchIDs[1])
 			cInput[1] = 1;
+		if(keys[32]) cInput[1] = 2;
 		
 		//  IF THE MOUSE HAS BEEN MOVED
 		// console.log(cInput[1])
@@ -447,9 +461,17 @@ class Game {
         	}
         }
 
-		 if(cInput[1] && !_tID)
-        	//  MAKE THE FIFTH INPUT TO A VECTOR POINTING FROM THE PLAYER TO THE MOUSES POSITION, DIRECTION
-        	cInput[4] = _tV.copy(mouse).sub(game.player.pos).dir();
+		if(!_tID) {
+		 	switch(cInput[1]) {
+		 		case 1:
+		        	//  MAKE THE FIFTH INPUT TO A VECTOR POINTING FROM THE PLAYER TO THE MOUSES POSITION, DIRECTION
+		        	cInput[4] = _tV.copy(mouse).sub(game.player.pos).dir();
+	        	break;
+	        	case 2:
+		        	cInput[4] = _tV.dir();
+	        	break;
+	        }
+        }
 
 		//  IF THERE HAS BEEN NO MOUSE OR RIGHT SIDE TOUCHES, SET THIS TO WHAT IT WAS LAST FRAME
         if(cInput[4] === null) cInput[4] = lR;
@@ -606,7 +628,7 @@ class Game {
 		if(server) {
 			game._eTime -= ts;
 			if(game._eTime <= 0) {
-				game._eTime = 5000;
+				game._eTime = 3000;
 				//  REUSING ACTORS
 				_actors = Object.keys(game.players);
 				game.addEnemy(null,null,game.players[_actors[Math.random()*_actors.length|0]]);
@@ -860,7 +882,7 @@ class Game {
 				ctx.font = Math.floor(scale*10)+'px '+'Arial';
 				ctx.fillText(_o[0],10,30 + _oI*Math.floor(scale*10));
 			}
-			// ctx.fillText(game.player.life,10,100);
+			ctx.fillText(game.player.life,10,100);
 			// ctx.fillText(message,100,100);
 
 		}
@@ -959,6 +981,7 @@ class Obj {
 
 		this.life = 1000;
 		this.hurt = false;
+		this.heal = 750;
 		// this.tookDamage = false;
 
 		//  FILL STYLE
@@ -1031,7 +1054,7 @@ class Obj {
 		// console.log(this.type,o.id,this.id);
 		this.pID = o.pID;
 		//  MAKE ENEMIES FIRE SLOWER (PLAYERS ARE NOT init-ED)
-		this.fSpeed = 1000;
+		this.fSpeed = 500;
 		// switch(this.type) {
 			// case 'enemy':
 				this.acc = 0.2;
@@ -1095,6 +1118,12 @@ class Obj {
 					// 	this.eTimer = 5000;
 					// 	game.addEnemy(null,null,this);
 					// }
+					this.heal -= ts;
+					if(this.heal < 0) {
+						this.heal = 750;
+						// console.log('heal')
+						this.life = Math.min(1000,this.life + 10);
+					}
 					if(this.life <= 0) {
 						game.removeObj(this.id);
 					}
@@ -1130,7 +1159,7 @@ class Obj {
 		}
 
 		//  RESET FIRING VARIABLE
-		if(this.firing && Date.now() > this.fTime + this.fSpeed)
+		if(this.firing && Date.now() > this.fTime + this.fSpeed + Math.random()*50)
 			this.firing = false;
 	};
 	processInput(I,ts) {
@@ -1168,15 +1197,15 @@ class Obj {
 			switch(this.aiType) {
 				case 0:
 					//  BELOW 500 PIXELS, ACCELERATE DIRECTLY AWAY FROM TARGET
-					if(_dist > 50
-					&& _dist < 100)
+					if(_dist > 75
+					&& _dist < 125)
 					//  ABOVE 500 BUT BELOW 800, CIRCLE
 						_tV.vFrD(_tV.dir()+PI*1.5);
 					//  ELSE IF BELOW 2000, ACCELERATE DIRECTLY TOWARDS
 					else if(_dist < 2000)
 						_tV.scl(-1);
 
-					if(_dist < 150)
+					if(_dist < 225 && _dist > 125)
 						this._in[1] = 1;
 						// game.fireBullet(this);
 

@@ -42,8 +42,8 @@
 
         //  v,count,w,h,angle,life,blend
         particles = {
-            thruster: [-0.5,1,5,8, 0.2,500,[6,5,4]],
-            splosion: [ 0.5,8, 12,12,PI*2,200,[3,2,15,10,7]],
+            thruster: [-0.5,1,5,8, 0.2,500,[6,5,4,4]],
+            splosion: [ 0.6,8, 12,12,PI*2,300,[3,3,2,15,15,10,7]],
         },
         particlePool = ObjectPool(Obj),
         _P,_ppI, _pV = vec(),
@@ -820,12 +820,13 @@
     
     startAudio = () => {
         sampleRate = audioCtx.sampleRate;
-        sounds['shoot'] = createBuffer([3,660,0.01,0.1,0.1,0.2,0.1,-220,1,40,1,-8,3]);
-
+        // sounds['shoot'] = createBuffer();
+        createInstrument(['shoot',76,16,[3,660,0.01,0.1,0.1,0.2,0.1,-220,1,40,1,-8,3]]);
         //  WHEN YOU GET HIT AND YOU OR THEY SPLODE
-        createInstrument(['splode',40,16,[ 1,120,0.01,0.1,0.1,0.5,0,-60,1,25,1,-15]])
+        createInstrument(['splode',40,16,[ 1,120,0.01,0.1,0.1,0.5,0,-60,1,25,1,-15]]);
         //  WHEN THEY GET HIT
-        createInstrument(['hit',40,15,[ 1,120,0.01,0.05,0.05,0.4,0,-5,1,25,0.8,-5]])
+        createInstrument(['hit',40,16,[ 1,120,0.01,0.05,0.05,0.4,0,-5,1,25,0.8,-5]]);
+
 
 
         // drawWave(sounds['test']);
@@ -834,7 +835,7 @@
 
         cnv.onclick = undefined;
         // playBuffer('shoot',0.1);
-            playBuffer('hit',0.8,50)
+            // playBuffer('hit',0.8,74)
             // playBuffer('splode',0.8,50)
     },
 
