@@ -26,7 +26,8 @@ let server,  //  IS THIS INSTANCE THE SERVER
 
 	_i, _iI,  //  CACHED INPUT VARIABLES
 	_b, _bI,  //  CACHED BULLET VARIABLES
-	 _tV,  //  A TEMPORARY VECTOR USED FOR BULLETS AND MOVEMENT
+	_tV,_tV2,  //  A TEMPORARY VECTOR USED FOR BULLETS AND MOVEMENT
+
 	// iID = 0,
 	_hit,  //  COLLISION VARIABLE
 	_hw,  //  HALF WIDTHS
@@ -37,6 +38,7 @@ let server,  //  IS THIS INSTANCE THE SERVER
 	_n, _d1, _d2,  //  NEAREST, DISTANCE TO
 	_dist, _dir,
 	_X,_Y,_W,_H,
+	bWs = [8,6,4,12,12], //  BULLET WIDTHS
 
 	nearestPlayer = obj => {
 
@@ -110,7 +112,7 @@ let server,  //  IS THIS INSTANCE THE SERVER
     	_p = game.player;
 		cam.shake();
 		emitParticle(_p.pos,0,'splosion');
-        playBuffer('splode',1,Math.floor((_p.life/1000)*16)+40);
+        playBuffer('splode',0.3,Math.floor((Math.max(_p.life,0)/1000)*16)+40);
     };
 
 
@@ -154,6 +156,9 @@ class Game {
 
 		//  INIT CACHED TEMPORARY VECTOR
 		_tV = vec();
+		_tV2 = vec();
+
+
 
 		_hit = vec();
 
@@ -177,6 +182,10 @@ class Game {
 			p.ship += this.pCol++;
 			if(this.pCol > 4) this.pCol = 1;
 			_p.sprite = p.ship;
+			if(p.ship[0] === '1')
+				_p.fSpeed = 150;
+			if(p.ship[0] === '2')
+				_p.fSpeed = 350;
 			// console.log(_p.sprite)
 		}
 
@@ -308,11 +317,20 @@ class Game {
 							gotHit();
 
 							//  END GAME EXPLOSIONS
-							if(_p.life <= 0) {
+							if(_p.life <= 0 && !_p.dead) {
+								_p.dead = true;
+								// touchIDs = [null,null];
+								// mouse.clr();
+								// console.log(_p.points);
+								localStorage.highScore = Math.max(localStorage.highScore || 0, _p.points);
+								// console.log(localStorage.highScore);
 								_hInt = setInterval(gotHit,200);
-								setTimeout(()=> {clearInterval(_hInt)},2600);
+								setTimeout(()=> {
+									clearInterval(_hInt);
+									// cam.pos.clr();
+								},2600);
 							}
-						} else playBuffer('hit',1,Math.floor((1-(_p.life/1000))*16)+40);
+						} else playBuffer('hit',0.3,Math.floor((1-(_p.life/1000))*16)+40);
 					}
 					_p.life = _o[7];
 
@@ -343,7 +361,7 @@ class Game {
 						_p.life = _o[7];
 						_p.hurt = Date.now();
 						emitParticle(_p.pos,0,'splosion');
-						playBuffer('hit',1,Math.floor((1-(_p.life/1000))*16)+40);
+						playBuffer('hit',0.3,Math.floor((1-(_p.life/1000))*16)+40);
 
 					}
 
@@ -518,10 +536,10 @@ class Game {
 			if(!p.firing) {
 				p.firing = true;
 				p.fTime = Date.now();
+				
 				//  SET TEMP VECTOR TO THE PLAYER (THAT IS SHOOTING) DIRECTION FACING SCALED FOR SPEED
 				_tV.vFrD(p.dir).scl((p.type === 'player' ? 10 : 6));
-				//  MAKE NEW BULLET
-				_b = game.objPool.newObject({
+				_o = {
 					type: p.type === 'player' ? 'pBullet' : 'eBullet',
 					x: p.pos.x+_tV.x,
 					y: p.pos.y+_tV.y,
@@ -529,16 +547,65 @@ class Game {
 					vx: p.vel.x + _tV.x,
 					vy: p.vel.y + _tV.y,
 					pID: p.id,
-					w: p.type === 'player' ? 12 : 8
-				})
-				game.actors[_b.id] = _b;
+					w: bWs[p.sprite[0]]
+					// w: p.type === 'player' ? 12 : 8
+				};
 
-				// console.log('firing',_b.id,_b.pID)
-				// _b.vel.scl(0.1)
-				// console.log(_b.type,'bullet id',_b.id);
-				// if(game.actors[_b.id])
-					// console.log('DOUBLING UP!!!',_b.id)
+				//  RESET
+				// _tV2.clr();
+				
 
+				// COCKPIT TYPE DECIDES FIRING PATTERN
+				switch(p.sprite[0]) {
+					//  DUAL BLASTERS
+					case '1':
+						//  COUNT 0,1,0,1
+						// _o.w = 6
+						p.fI = (p.fI + 1) % 2;
+						_tV2.vFrD(p.dir + PI/2 * (p.fI?1:-1)).scl(4);
+						_o.x += _tV2.x;
+						_o.y += _tV2.y;
+						_b = game.objPool.newObject(_o);
+						game.actors[_b.id] = _b;
+					break;
+					//  SPREAD SHOT BUBBLE DOME
+					case '2':
+					// console.log('wtf')
+						// _o.w = 4;
+						// console.log(_o.w)
+						_b = game.objPool.newObject(_o);
+						game.actors[_b.id] = _b;
+						_tV2.vFrD(p.dir + PI/2).scl(10);
+						_o.x += _tV2.x;
+						_o.y += _tV2.y;
+						_o.vx += _tV2.x/6;
+						_o.vy += _tV2.y/6;
+						_b = game.objPool.newObject(_o);
+						game.actors[_b.id] = _b;
+						// _tV2.vFrD(p.dir - PI/2).scl(20);
+						_o.x -= _tV2.x*2;
+						_o.y -= _tV2.y*2;
+						_o.vx -= _tV2.x/3;
+						_o.vy -= _tV2.y/3;
+						_b = game.objPool.newObject(_o);
+						game.actors[_b.id] = _b;
+						
+					break;
+					default:
+						_o.w = 12;
+						_b = game.objPool.newObject(_o);
+						game.actors[_b.id] = _b;
+					break;
+					
+				};
+
+				
+				//  RESEET p.fI FOR FIRING
+				// p.fI = 1;
+				//  MAKE NEW BULLET
+				// _b = game.objPool.newObject(_o);
+				
+				// game.actors[_b.id] = _b;
 			}
 		} else {
 			//  CLIENT SIDE JUST MAKE NEW BULLET WITH DATA FROM STATE
@@ -548,7 +615,7 @@ class Game {
 				y: b[1],
 				id: id,
 				pID: b[5],
-				w: b[6] === 'pB' ? 12 : 8
+				w: bWs[game.actors[b[5]].sprite[0]]
 			});
 			game.actors[_b.id] = _b;
 
@@ -560,7 +627,7 @@ class Game {
 	//  BUT NOT ON ANY OTHER PLAYER'S SCREENS, PUT LOC IN o = [x,y]
 	findSpawnLocation(P,o) {
 		//  RANDOM DIRECTION 
-		_tV.vFrD(Math.random()*PI*2).scl(250).add(P.pos);
+		_tV.vFrD(Math.random()*PI*2).scl(400).add(P.pos);
 		for(_pI in game.players) {
 			_p = game.players[_pI];
 			if(_tV.dist(_p.pos)<250)
@@ -608,7 +675,7 @@ class Game {
 				game._points = [];
 				for(_pI in game.players) {
 					_p = game.players[_pI];
-					game._points.push([_p.points,_p.sprite[4]]);
+					game._points.push([_p.points,_p.sprite[4],_p.id]);
 					game._points.sort((a,b) => b[0]-a[0]);
 					// game._points.push([_p.sprite[4]]);
 
@@ -638,7 +705,6 @@ class Game {
 			//  FOR EACH ACTOR
 			for(_pI in game.actors) {
 				_p = game.actors[_pI];
-				// _p.input = false;
 				//  IF THEY HAVE INPUT TO BE PROCESSED
 				if(input[_p.id]) {
 					if(input[_p.id].length > 0) {
@@ -872,17 +938,24 @@ class Game {
 		
 		ctx.restore();
 		ctx.fillStyle = 'white';
-		if(game.player) {
-			// console.log(game.player.sprite)
+		_p = game.player;
+		if(_p) {
+			// console.log(_p.sprite)
 			// ctx.drawImage(images.sprites,0,0,512,512);
-			for(_oI=0; _oI<game._points.length; _oI++) {
-				_o = game._points[_oI];
-				ctx.fillStyle = colours[palettes[_o[1]][1]];
-				// console.log(palettes[_o[1]][2]);
-				ctx.font = Math.floor(scale*10)+'px '+'Arial';
-				ctx.fillText(_o[0],10,30 + _oI*Math.floor(scale*10));
+			if(!_p.dead) {
+				for(_oI=0; _oI<game._points.length; _oI++) {
+					_o = game._points[_oI];
+					ctx.fillStyle = colours[palettes[_o[1]][1]];
+					// console.log(palettes[_o[1]][2]);
+					ctx.font = Math.floor(scale*10)+'px '+'Arial';
+					ctx.fillText(_o[0],10,30 + _oI*Math.floor(scale*10));
+				}
+				ctx.fillText(Math.max(0,_p.life),10,100);
+			} else {
+				ctx.fillText('High Score: '+localStorage.highScore,
+					cnv.width/scale/4,
+					cnv.height/scale/4);
 			}
-			ctx.fillText(game.player.life,10,100);
 			// ctx.fillText(message,100,100);
 
 		}
@@ -1015,6 +1088,9 @@ class Obj {
 		this.firing = 0;
 		this.fSpeed = 200;
 		this.fTime = 0;
+		this.fI = 0;   //  FIRING INDEX
+
+		this.tTime = 0;  //  TIMER FOR THRUSTER SOUNDS
 
 		// this.eTimer = 2000;
 
@@ -1062,6 +1138,7 @@ class Obj {
 			// case 'eBullet':
 			// break;
 		// }
+		// console.log(o.w)
 		this.w = o.w;
 		this.h = o.h || o.w;
 		this.sprite = o.sprite;
@@ -1148,8 +1225,17 @@ class Obj {
 		} else {
 			if(this.type === 'player' || this.type === 'enemy') {
 				// console.log(this.input)
-				if(this.input)
+				if(this.input) {
+					//  THRUSTER SOUND
+					if(this.id === game.id) {
+						if(this.tTime <= 0) {
+							playBuffer('thrust',0.1,40);
+							this.tTime = 300;
+						} else this.tTime -= ts;
+					}
+					//  THRUSTER PARTICLES
 					emitParticle(_tV.vFrD(this.dir).unit().scl(-8).add(this.pos),this.axis.dir(),'thruster',this.vel.mag()* -1);
+				} else this.tTime = 0;
 			}
 		}
 		//  HURT TIMER
@@ -1243,7 +1329,7 @@ class Obj {
 			case 'enemy':
 			// console.log('enemy hit')
 				if(obj.type !== 'eBullet')
-					this.life -= 124;
+					this.life -= 256;
 				if(_o) _o.points += this.life <= 0 ? 100 : 10;
 				// this.lastHit = obj.pID || obj.id;
 			break;
@@ -1663,7 +1749,7 @@ function createGameLoop() {
 
 // Generate a palette
 //  use -ss 30 -t 3 to skip 30 seconds and take the next 3
-// ffmpeg -y  -i sf3.mov -vf fps=24,scale=480:-1:flags=lanczos,palettegen palette.png
+// ffmpeg -y  -i sf4.mov -vf fps=24,scale=480:-1:flags=lanczos,palettegen palette.png
 
 //  Output a gif
-// ffmpeg -y -i sf3.mov -i palette.png -ss 10 -t 30 -filter_complex "fps=24,scale=480:-1:flags=lanczos[x];[x][1:v]paletteuse" sf3.gif
+// ffmpeg -y -i sf4.mov -i palette.png -ss 18 -t 10 -filter_complex "fps=60,scale=480:-1:flags=lanczos[x];[x][1:v]paletteuse" sf4.gif

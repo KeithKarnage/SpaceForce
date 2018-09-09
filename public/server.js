@@ -30,7 +30,7 @@ function findMatch(user) {
 		if(found) return;
 		//  IF THIS MATCH HAS LESS THAN x USERS
 		//  AND THE USER HASN'T ALREADY GOT A MATCH
-		if(m.users && m.users.length < 10
+		if(m.users && m.users.length < 4
 		&& !user.match) {
 			console.log(user.socket.id,'joining match,',m.id);
 			//  TELL THE USER TO JOIN THE MATCH
@@ -113,7 +113,7 @@ class User {
 		this.socket = socket;
 		this.match = null;
 		this.ship = '';
-	}
+	};
 
 	/**
 	 * Start new match
@@ -122,7 +122,7 @@ class User {
 	start() {
 		this.match = match;
 		this.socket.emit("start");
-	}
+	};
 
 	/**
 	 * Join a match
@@ -133,7 +133,7 @@ class User {
 		this.match = match;
 		match.join(this);
 		
-	}
+	};
 
 	/**
 	 * Terminate match
@@ -144,7 +144,7 @@ class User {
 		this.match = null;
 		this.socket.emit("end");
 	}
-}
+};
 
 
 
