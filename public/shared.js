@@ -80,7 +80,7 @@ let server,  //  IS THIS INSTANCE THE SERVER
             //  PLAYER
             case 0:
 	            //  COCKPIT
-                _ship += (Math.random()*5)|0;
+                _ship += 1+(Math.random()*3)|0;
                 //  BODY
                 _ship += (Math.random()*5)|0;
                 //  WING
@@ -100,6 +100,16 @@ let server,  //  IS THIS INSTANCE THE SERVER
             break;
         }
     },
+    mStats = [10,2.375,9],
+    shipStats = ship => {
+        return [//  ARMOUR
+            (1*ship[1]+ship[2]%5)/2 + 6,
+            //  ACCELERATION
+            1.25+ (10 - (ship[1]*1+ship[3]*1))/8,
+            //  TURN SPEED
+            3.5+ 1*ship[3] + (5-ship[2]%5)/2
+        ]
+    },
     collision = (o1,o2) => {
     	o1.collidedWith[o2.id] = true;
     	o2.collidedWith[o1.id] = true;
@@ -109,10 +119,13 @@ let server,  //  IS THIS INSTANCE THE SERVER
     },
     _hInt,  //  HIT INTERVAL
     gotHit = p => {
-    	_p = game.player;
-		cam.shake();
-		emitParticle(_p.pos,0,'splosion');
-        playBuffer('splode',0.3,Math.floor((Math.max(_p.life,0)/1000)*16)+40);
+    	// console.log('got hit')
+    	// if(game) {
+	    	_p = game.player;
+			cam.shake();
+			emitParticle(_p.pos,0,'splosion');
+	        playBuffer('splode',0.3,Math.floor((Math.max(_p.life,0)/1000)*16)+40);
+	    // }
     };
 
 
@@ -182,10 +195,16 @@ class Game {
 			p.ship += this.pCol++;
 			if(this.pCol > 4) this.pCol = 1;
 			_p.sprite = p.ship;
+			_o = shipStats(p.ship);
+			_p.life = _o[0]*100;
+			_p.mLife = _o[0]*100;
+
+			_p.boost = _o[1];
+			_p.tSpd = _o[2];
 			if(p.ship[0] === '1')
 				_p.fSpeed = 150;
 			if(p.ship[0] === '2')
-				_p.fSpeed = 350;
+				_p.fSpeed = 300;
 			// console.log(_p.sprite)
 		}
 
@@ -317,14 +336,21 @@ class Game {
 							gotHit();
 
 							//  END GAME EXPLOSIONS
-							if(_p.life <= 0 && !_p.dead) {
+							if(_p.life <= 0) {
 								_p.dead = true;
 								// touchIDs = [null,null];
 								// mouse.clr();
-								// console.log(_p.points);
+								console.log(_p.points);
+								// console.log('wtf');
 								localStorage.highScore = Math.max(localStorage.highScore || 0, _p.points);
-								// console.log(localStorage.highScore);
+								// console.log('wtf2');
+
+								// console.log(localStorage);
+								// console.log('wtf3');
+
 								_hInt = setInterval(gotHit,200);
+								// console.log(_hInt)
+
 								setTimeout(()=> {
 									clearInterval(_hInt);
 									// cam.pos.clr();
@@ -952,7 +978,7 @@ class Game {
 				}
 				ctx.fillText(Math.max(0,_p.life),10,100);
 			} else {
-				ctx.fillText('High Score: '+localStorage.highScore,
+				ctx.fillText('High Score: '+(localStorage.highScore||0),
 					cnv.width/scale/4,
 					cnv.height/scale/4);
 			}
@@ -1052,7 +1078,8 @@ class Obj {
 
 		this.points = 0;
 
-		this.life = 1000;
+		this.life = 1;
+		this.mLife = 1;
 		this.hurt = false;
 		this.heal = 750;
 		// this.tookDamage = false;
@@ -1079,7 +1106,7 @@ class Obj {
 
 		//  ROTATION
 		// this.r = 0;
-		this.tSpd = 10;
+		this.tSpd = 1;
 		//  WIDTH HEIGHT
 		this.w = w || 16;
 		this.h = h || 16;
@@ -1199,7 +1226,7 @@ class Obj {
 					if(this.heal < 0) {
 						this.heal = 750;
 						// console.log('heal')
-						this.life = Math.min(1000,this.life + 10);
+						this.life = Math.min(this.mLife,this.life + 10);
 					}
 					if(this.life <= 0) {
 						game.removeObj(this.id);
@@ -1285,13 +1312,13 @@ class Obj {
 					//  BELOW 500 PIXELS, ACCELERATE DIRECTLY AWAY FROM TARGET
 					if(_dist > 75
 					&& _dist < 125)
-					//  ABOVE 500 BUT BELOW 800, CIRCLE
+					//  CIRCLE
 						_tV.vFrD(_tV.dir()+PI*1.5);
 					//  ELSE IF BELOW 2000, ACCELERATE DIRECTLY TOWARDS
 					else if(_dist < 2000)
 						_tV.scl(-1);
 
-					if(_dist < 225 && _dist > 125)
+					if(_dist < 300 && _dist > 125)
 						this._in[1] = 1;
 						// game.fireBullet(this);
 

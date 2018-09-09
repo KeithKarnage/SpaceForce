@@ -311,7 +311,7 @@
         },
         join = e => {
             if(!audioCtx) return;
-            console.log(mouse.x, innerWidth/scale/2);
+            // console.log(mouse.x, innerWidth/scale/2);
             if((e.touches && touchPos(e.touches[0]).x > innerWidth/scale/2)
             || touchPos(e).x > innerWidth/scale/2) {
                 if(Date.now() - timer > 1000) {
@@ -534,10 +534,27 @@
             ctx.save();
             ctx.scale(8,8);
             ctx.fillRect(0,0,cnv.width,cnv.height);
-            drawShip(ctx,Math.floor(cnv.width/16)-12,16,_ship[4]||0,_ship);
+            _o = Math.floor(cnv.width/16)-12;
+            drawShip(ctx,_o,cnv.height/scale/20|0,_ship[4]||0,_ship);
+            ctx.font = '2px futura';
+            ctx.textAlign = 'center';
+            // _oI = ;
+            ['Armour','Accel','Turn'].forEach((k,i) => {
+                ctx.fillStyle = colours[3];
+                console.log(cnv.height,scale)
+                ctx.fillRect(_o+7,cnv.height/scale/6+4*i,10,2.5);
+                // console.log(shipStats(_ship)[i]/mStats[i])
+                ctx.fillStyle = colours[8];
+                ctx.fillRect(_o+7,cnv.height/scale/6+4*i,10*shipStats(_ship)[i]/mStats[i],2.5);
+
+                ctx.fillStyle = colours[0];
+                ctx.fillText(k,_o+12,cnv.height/scale/6+4*i+2);    
+            });
+            
+            console.log(shipStats(_ship));
             ctx.restore();
         };
-
+// localStorage.clear();
 
     //  APPEND CANVAS TO DOCUMENT
     document.body.appendChild(cnv);
