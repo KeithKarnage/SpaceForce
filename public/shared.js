@@ -38,7 +38,7 @@ let server,  //  IS THIS INSTANCE THE SERVER
 	_n, _d1, _d2,  //  NEAREST, DISTANCE TO
 	_dist, _dir,
 	_X,_Y,_W,_H,
-	bWs = [8,6,4,12,12], //  BULLET WIDTHS
+	bWs = [8,12,6,4,12], //  BULLET WIDTHS
 
 	nearestPlayer = obj => {
 
@@ -201,9 +201,9 @@ class Game {
 
 			_p.boost = _o[1];
 			_p.tSpd = _o[2];
-			if(p.ship[0] === '1')
-				_p.fSpeed = 150;
 			if(p.ship[0] === '2')
+				_p.fSpeed = 150;
+			if(p.ship[0] === '3')
 				_p.fSpeed = 300;
 			// console.log(_p.sprite)
 		}
@@ -341,12 +341,12 @@ class Game {
 								// touchIDs = [null,null];
 								// mouse.clr();
 								console.log(_p.points);
-								// console.log('wtf');
+
 								localStorage.highScore = Math.max(localStorage.highScore || 0, _p.points);
-								// console.log('wtf2');
+
 
 								// console.log(localStorage);
-								// console.log('wtf3');
+
 
 								_hInt = setInterval(gotHit,200);
 								// console.log(_hInt)
@@ -564,7 +564,7 @@ class Game {
 				p.fTime = Date.now();
 				
 				//  SET TEMP VECTOR TO THE PLAYER (THAT IS SHOOTING) DIRECTION FACING SCALED FOR SPEED
-				_tV.vFrD(p.dir).scl((p.type === 'player' ? 10 : 6));
+				_tV.vFrD(p.dir).scl((p.type === 'player' ? 8 : 5));
 				_o = {
 					type: p.type === 'player' ? 'pBullet' : 'eBullet',
 					x: p.pos.x+_tV.x,
@@ -584,7 +584,7 @@ class Game {
 				// COCKPIT TYPE DECIDES FIRING PATTERN
 				switch(p.sprite[0]) {
 					//  DUAL BLASTERS
-					case '1':
+					case '2':
 						//  COUNT 0,1,0,1
 						// _o.w = 6
 						p.fI = (p.fI + 1) % 2;
@@ -595,8 +595,8 @@ class Game {
 						game.actors[_b.id] = _b;
 					break;
 					//  SPREAD SHOT BUBBLE DOME
-					case '2':
-					// console.log('wtf')
+					case '3':
+
 						// _o.w = 4;
 						// console.log(_o.w)
 						_b = game.objPool.newObject(_o);
@@ -886,6 +886,9 @@ class Game {
 						}
 					}
 					_p.arrow.scl(0.9).add(game.player.pos);
+					_p.arrow.s = (1.2-_p.pos.dist(game.player.pos)/1500)*1.7;
+					if(_p.type == 'player' && _p.arrow.s < 0.4)
+						_p.arrow.s = 0.4;
 					//  THE DIRECTION IT IS POINTING (FOR AIMING AN ARROW)
 					_p.arrow.d = _tV.dir();
 					// _p.arrow.scl(0.8);
@@ -952,6 +955,7 @@ class Game {
 						ctx.save()
 						ctx.translate(_p.arrow.x,_p.arrow.y);
 						ctx.rotate(_p.arrow.d-PI/2);
+						ctx.scale(_p.arrow.s,_p.arrow.s);
 						ctx.drawImage(images.sprites,_p.sprite[4]*8||0,80,8,8,-8,-8,16,16);
 						ctx.restore();
 					}
@@ -963,24 +967,42 @@ class Game {
 
 		
 		ctx.restore();
-		ctx.fillStyle = 'white';
+
 		_p = game.player;
 		if(_p) {
 			// console.log(_p.sprite)
 			// ctx.drawImage(images.sprites,0,0,512,512);
 			if(!_p.dead) {
+				//  DRAW POINTS IN CORNER IN ORDER RECIEVED FROM SERVER
 				for(_oI=0; _oI<game._points.length; _oI++) {
 					_o = game._points[_oI];
 					ctx.fillStyle = colours[palettes[_o[1]][1]];
 					// console.log(palettes[_o[1]][2]);
-					ctx.font = Math.floor(scale*10)+'px '+'Arial';
+					ctx.font = Math.floor(scale*10)+'px '+'futura';
 					ctx.fillText(_o[0],10,30 + _oI*Math.floor(scale*10));
 				}
-				ctx.fillText(Math.max(0,_p.life),10,100);
+				ctx.fillStyle = colours[0];
+				ctx.fillText('❤️'+Math.max(0,_p.life),128,30);
 			} else {
+				ctx.fillStyle = 'white';
+				ctx.fillText('YourScore: '+_p.points,
+					cnv.width/scale/4,
+					cnv.height/scale/2)
 				ctx.fillText('High Score: '+(localStorage.highScore||0),
 					cnv.width/scale/4,
 					cnv.height/scale/4);
+			};
+			for(_oI=0; _oI<2; _oI++) {
+				_o = touchStart[_oI];
+				if(_o) {
+					ctx.strokeStyle = 'red';
+					ctx.beginPath();
+					ctx.moveTo(_o.x*scale,_o.y*scale);
+					_o = touchPos(touches[touchIDs[_oI]]);
+					ctx.lineTo(_o.x*scale,_o.y*scale);
+					ctx.stroke();
+				}
+
 			}
 			// ctx.fillText(message,100,100);
 
@@ -1117,7 +1139,7 @@ class Obj {
 		this.fTime = 0;
 		this.fI = 0;   //  FIRING INDEX
 
-		this.tTime = 0;  //  TIMER FOR THRUSTER SOUNDS
+		// this.tTime = 0;  //  TIMER FOR THRUSTER SOUNDS
 
 		// this.eTimer = 2000;
 
@@ -1157,7 +1179,7 @@ class Obj {
 		// console.log(this.type,o.id,this.id);
 		this.pID = o.pID;
 		//  MAKE ENEMIES FIRE SLOWER (PLAYERS ARE NOT init-ED)
-		this.fSpeed = 500;
+		this.fSpeed = 700;
 		// switch(this.type) {
 			// case 'enemy':
 				this.acc = 0.2;
@@ -1234,7 +1256,7 @@ class Obj {
 				break;
 				case 'enemy':
 				// console.log(this)
-					if(nearestPlayer(this) > 2000) {
+					if(nearestPlayer(this) > 1500) {
 						console.log('enemy despawning')
 						game.removeObj(this.id);
 					}
@@ -1250,19 +1272,27 @@ class Obj {
 			
 		//  NOT ON SERVER
 		} else {
-			if(this.type === 'player' || this.type === 'enemy') {
+			switch(this.type) {
+				case 'player':
+				case 'enemy':
+			// if(this.type === 'player' || this.type === 'enemy') {
 				// console.log(this.input)
-				if(this.input) {
-					//  THRUSTER SOUND
-					if(this.id === game.id) {
-						if(this.tTime <= 0) {
-							playBuffer('thrust',0.1,40);
-							this.tTime = 300;
-						} else this.tTime -= ts;
-					}
-					//  THRUSTER PARTICLES
-					emitParticle(_tV.vFrD(this.dir).unit().scl(-8).add(this.pos),this.axis.dir(),'thruster',this.vel.mag()* -1);
-				} else this.tTime = 0;
+					if(this.input) {
+						//  THRUSTER SOUND
+						// if(this.id === game.id) {
+						// 	if(this.tTime <= 0) {
+						// 		playBuffer('thrust',0.1,40);
+						// 		this.tTime = 300;
+						// 	} else this.tTime -= ts;
+						// }
+						//  THRUSTER PARTICLES
+						emitParticle(_tV.vFrD(this.dir).unit().scl(-8).add(this.pos),this.axis.dir(),'thruster',this.vel.mag()* -1);
+					} //else this.tTime = 0;
+				break;
+				case 'eBullet':
+				case 'pBullet':
+					emitParticle(this.pos,0,'bullet');
+				break;
 			}
 		}
 		//  HURT TIMER
@@ -1318,7 +1348,7 @@ class Obj {
 					else if(_dist < 2000)
 						_tV.scl(-1);
 
-					if(_dist < 300 && _dist > 125)
+					if(_dist < 260 && _dist > 125)
 						this._in[1] = 1;
 						// game.fireBullet(this);
 
