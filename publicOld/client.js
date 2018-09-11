@@ -904,7 +904,7 @@
         sounds['hat'] = createBuffer([0,,0.02,0,0.01,1,0.015,,0,10,1]);
 
         // cnv.onclick = undefined;
-        playBuffer('beat',1,45);
+        playBuffer('beat',0.001,45);
             // playBuffer('hit',0.8,74)
             // playBuffer('test',0.4,30)
             // setTimeout(()=> {playBuffer('test',0.4,31)},400)

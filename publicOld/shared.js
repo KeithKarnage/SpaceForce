@@ -131,7 +131,7 @@ let server,  //  IS THIS INSTANCE THE SERVER
 	    	_p = game.player;
 			cam.shake();
 			emitParticle(_p.pos,0,'splosion');
-	        playBuffer('splode',0.3,Math.floor((Math.max(_p.life,0)/1000)*16)+40);
+	        playBuffer('splode',0.05,Math.floor((Math.max(_p.life,0)/1000)*16)+40);
 	    // }
     };
 
@@ -244,7 +244,7 @@ class Game {
 				case 'cargo':
 					if(!server
 					&& _p.pos.dist(game.player.pos) < 500)
-						playBuffer('splode',1,40);
+						playBuffer('splode',0.01,40);
 					// _p.release();
 				// break;
 				default:
@@ -363,7 +363,7 @@ class Game {
 									// cam.pos.clr();
 								},2600);
 							}
-						} else playBuffer('hit',0.3,Math.floor((1-(_p.life/1000))*16)+40);
+						} else playBuffer('hit',0.1,Math.floor((1-(_p.life/1000))*16)+40);
 					};
 					_p.life = _o[7];
 					if(_p.mLife === 1) _p.mLife = _p.life;
@@ -379,7 +379,7 @@ class Game {
 						//  IF IT IS THE CLIENT PLAYER'S BULLET, SHAKE CAM
 						if(_o[5] === game.id)
 							cam.shake(game.player.dir +0.001);
-						playBuffer('shoot',0.1,(_o[6]==='eB'?76:80));
+						playBuffer('shoot',0.05,(_o[6]==='eB'?76:80));
 					};
 				break;
 				case 'en':
@@ -393,7 +393,7 @@ class Game {
 						_p.life = _o[7];
 						_p.hurt = Date.now();
 						emitParticle(_p.pos,0,'splosion');
-						playBuffer('hit',0.3,Math.floor((1-(_p.life/1000))*16)+40);
+						playBuffer('hit',0.05,Math.floor((1-(_p.life/1000))*16)+40);
 
 					};
 
