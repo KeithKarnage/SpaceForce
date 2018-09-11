@@ -808,7 +808,7 @@ class Game {
 						playBuffer('lead',0.05,35+_song[((_beat/2)|0)%2]+_seq[((_beat/16)|0)%4]);
 					// console.log((_beat/2)|0
 					// if(_beat%8 == 0) playBuffer('pad',0.5,42+_song[((_beat/8)|0)%2]+_seq[((_beat/32)|0)%2]);
-					if(_hw > 0.75 && _beat%4 == 0) playBuffer('beat',1);
+					if(_hw > 0.67 && _beat%4 == 0) playBuffer('beat',1);
 					if(_hw > 0.5 && _beat%4 != 3) playBuffer('hat',_beat%4==0?1:0.7);
 					_beat++;
 				}
@@ -1271,7 +1271,7 @@ class Obj {
 				case 'cargo':
 			// if(this.type === 'player' || this.type === 'enemy') {
 
-					if(this.input) {
+					if(this.input && !this.dead) {
 						//  THRUSTER SOUND
 						// if(this.id === game.id) {
 						// 	if(this.tTime <= 0) {
